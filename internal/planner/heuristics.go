@@ -5,13 +5,13 @@ import (
 	"sort"
 	"strings"
 
-	"aichatplayers/internal/api"
+	"aichatplayers/internal/models"
 	"aichatplayers/internal/util"
 )
 
 const maxRecentMessages = 10
 
-func detectTopics(messages []api.ChatMessage) []Topic {
+func detectTopics(messages []models.ChatMessage) []Topic {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -53,7 +53,7 @@ func detectTopics(messages []api.ChatMessage) []Topic {
 	return ordered
 }
 
-func generateResponse(topic Topic, bot api.BotProfile, rng *rand.Rand) (string, string) {
+func generateResponse(topic Topic, bot models.BotProfile, rng *rand.Rand) (string, string) {
 	if shouldAvoidTopic(topic, bot.Persona.AvoidTopics) {
 		return "", ""
 	}

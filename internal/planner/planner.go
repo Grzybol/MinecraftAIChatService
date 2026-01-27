@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"sync"
 
-	"aichatplayers/internal/api"
+	"aichatplayers/internal/models"
 	"aichatplayers/internal/util"
 )
 
@@ -17,17 +17,17 @@ type BotMemory struct {
 type Planner struct {
 	mu       sync.Mutex
 	memory   map[string]map[string]BotMemory
-	registry map[string]map[string]api.BotProfile
+	registry map[string]map[string]models.BotProfile
 }
 
 func NewPlanner() *Planner {
 	return &Planner{
 		memory:   make(map[string]map[string]BotMemory),
-		registry: make(map[string]map[string]api.BotProfile),
+		registry: make(map[string]map[string]models.BotProfile),
 	}
 }
 
-func (p *Planner) RegisterBots(serverID string, bots []api.BotProfile) int {
+func (p *Planner) RegisterBots(serverID string, bots []models.BotProfile) int {
 	if serverID == "" {
 		serverID = "default"
 	}
@@ -35,7 +35,7 @@ func (p *Planner) RegisterBots(serverID string, bots []api.BotProfile) int {
 	defer p.mu.Unlock()
 
 	if p.registry[serverID] == nil {
-		p.registry[serverID] = make(map[string]api.BotProfile)
+		p.registry[serverID] = make(map[string]models.BotProfile)
 	}
 	count := 0
 	for _, bot := range bots {
@@ -48,30 +48,30 @@ func (p *Planner) RegisterBots(serverID string, bots []api.BotProfile) int {
 	return count
 }
 
-func (p *Planner) Plan(req api.PlanRequest) api.PlanResponse {
+func (p *Planner) Plan(req models.PlanRequest) models.PlanResponse {
 	rng := util.NewSeededRand(req.RequestID, fmt.Sprint(req.Tick), fmt.Sprint(req.TimeMS))
 	availableBots := filterAvailableBots(req.Bots)
 	if len(availableBots) == 0 {
-		return api.PlanResponse{RequestID: req.RequestID}
+		return models.PlanResponse{RequestID: req.RequestID}
 	}
 
-	topics := DetectTopics(req.Chat)
+	topics := detectTopics(req.Chat)
 	settings := normalizeSettings(req.Settings)
 
 	actions, strategy, suppressed := p.buildPlan(req, topics, availableBots, settings, rng)
 
-	return api.PlanResponse{
+	return models.PlanResponse{
 		RequestID: req.RequestID,
 		Actions:   actions,
-		Debug: api.PlanDebug{
+		Debug: models.PlanDebug{
 			ChosenStrategy:    strategy,
 			SuppressedReplies: suppressed,
 		},
 	}
 }
 
-func filterAvailableBots(bots []api.BotProfile) []api.BotProfile {
-	available := make([]api.BotProfile, 0, len(bots))
+func filterAvailableBots(bots []models.BotProfile) []models.BotProfile {
+	available := make([]models.BotProfile, 0, len(bots))
 	for _, bot := range bots {
 		if !bot.Online {
 			continue
@@ -84,7 +84,7 @@ func filterAvailableBots(bots []api.BotProfile) []api.BotProfile {
 	return available
 }
 
-func normalizeSettings(settings api.PlanSettings) api.PlanSettings {
+func normalizeSettings(settings models.PlanSettings) models.PlanSettings {
 	if settings.MaxActions <= 0 {
 		settings.MaxActions = 2
 	}
@@ -106,7 +106,7 @@ func normalizeSettings(settings api.PlanSettings) api.PlanSettings {
 	return settings
 }
 
-func (p *Planner) buildPlan(req api.PlanRequest, topics []Topic, bots []api.BotProfile, settings api.PlanSettings, rng *rand.Rand) ([]api.PlannedAction, string, int) {
+func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []models.BotProfile, settings models.PlanSettings, rng *rand.Rand) ([]models.PlannedAction, string, int) {
 	strategy := "heuristics"
 	if len(topics) == 0 {
 		if rng.Float64() < settings.GlobalSilenceChance {
@@ -123,7 +123,7 @@ func (p *Planner) buildPlan(req api.PlanRequest, topics []Topic, bots []api.BotP
 		return nil, "reply_suppressed", 1
 	}
 
-	actions := make([]api.PlannedAction, 0, settings.MaxActions)
+	actions := make([]models.PlannedAction, 0, settings.MaxActions)
 	suppressed := 0
 
 	selectedBots := pickBots(bots, settings.MaxActions, rng)
@@ -136,11 +136,11 @@ func (p *Planner) buildPlan(req api.PlanRequest, topics []Topic, bots []api.BotP
 				suppressed++
 				continue
 			}
-			message, reason := GenerateResponse(topic, bot, rng)
+			message, reason := generateResponse(topic, bot, rng)
 			if message == "" {
 				continue
 			}
-			actions = append(actions, api.PlannedAction{
+			actions = append(actions, models.PlannedAction{
 				BotID:       bot.BotID,
 				SendAfterMS: randomDelay(settings, rng),
 				Message:     message,
@@ -153,15 +153,15 @@ func (p *Planner) buildPlan(req api.PlanRequest, topics []Topic, bots []api.BotP
 	return actions, strategy, suppressed
 }
 
-func (p *Planner) smallTalkPlan(req api.PlanRequest, bots []api.BotProfile, settings api.PlanSettings, rng *rand.Rand) []api.PlannedAction {
+func (p *Planner) smallTalkPlan(req models.PlanRequest, bots []models.BotProfile, settings models.PlanSettings, rng *rand.Rand) []models.PlannedAction {
 	selected := pickBots(bots, 1, rng)
-	actions := make([]api.PlannedAction, 0, 1)
+	actions := make([]models.PlannedAction, 0, 1)
 	for _, bot := range selected {
-		message, reason := GenerateResponse("", bot, rng)
+		message, reason := generateResponse("", bot, rng)
 		if message == "" {
 			continue
 		}
-		actions = append(actions, api.PlannedAction{
+		actions = append(actions, models.PlannedAction{
 			BotID:       bot.BotID,
 			SendAfterMS: randomDelay(settings, rng),
 			Message:     message,
@@ -219,11 +219,11 @@ func containsTopic(topics []Topic, target Topic) bool {
 	return false
 }
 
-func pickBots(bots []api.BotProfile, max int, rng *rand.Rand) []api.BotProfile {
+func pickBots(bots []models.BotProfile, max int, rng *rand.Rand) []models.BotProfile {
 	if len(bots) <= max {
 		return bots
 	}
-	selected := make([]api.BotProfile, 0, max)
+	selected := make([]models.BotProfile, 0, max)
 	indices := rng.Perm(len(bots))
 	for i := 0; i < len(indices) && len(selected) < max; i++ {
 		selected = append(selected, bots[indices[i]])
@@ -231,7 +231,7 @@ func pickBots(bots []api.BotProfile, max int, rng *rand.Rand) []api.BotProfile {
 	return selected
 }
 
-func randomDelay(settings api.PlanSettings, rng *rand.Rand) int64 {
+func randomDelay(settings models.PlanSettings, rng *rand.Rand) int64 {
 	span := settings.MaxDelayMS - settings.MinDelayMS
 	if span <= 0 {
 		return settings.MinDelayMS
