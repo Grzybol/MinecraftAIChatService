@@ -31,8 +31,20 @@ func RequestLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := RequestIDFromContext(r.Context())
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("ts=%s request_id=%s method=%s path=%s duration_ms=%d", start.Format(time.RFC3339), reqID, r.Method, r.URL.Path, time.Since(start).Milliseconds())
+		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		log.Printf(
+			"ts=%s request_id=%s method=%s path=%s status=%d bytes=%d duration_ms=%d remote_addr=%s user_agent=%q",
+			start.Format(time.RFC3339),
+			reqID,
+			r.Method,
+			r.URL.Path,
+			recorder.status,
+			recorder.bytes,
+			time.Since(start).Milliseconds(),
+			r.RemoteAddr,
+			r.UserAgent(),
+		)
 	})
 }
 
@@ -45,4 +57,21 @@ func LimitBodySize(limit int64, next http.Handler) http.Handler {
 
 func generateRequestID() string {
 	return time.Now().Format("20060102T150405.000000000")
+}
+
+type responseRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (r *responseRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *responseRecorder) Write(data []byte) (int, error) {
+	size, err := r.ResponseWriter.Write(data)
+	r.bytes += size
+	return size, err
 }

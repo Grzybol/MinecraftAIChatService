@@ -2,8 +2,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"aichatplayers/internal/api"
@@ -15,6 +19,14 @@ const bodyLimitBytes = 1 << 20
 func main() {
 	listenAddr := flag.String("listen", ":8090", "http listen address")
 	flag.Parse()
+
+	logFile, err := initLogging()
+	if err != nil {
+		log.Fatalf("failed to init logging: %v", err)
+	}
+	if logFile != nil {
+		defer logFile.Close()
+	}
 
 	plan := planner.NewPlanner()
 	h := &api.Handler{Planner: plan}
@@ -38,6 +50,22 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
+}
+
+func initLogging() (*os.File, error) {
+	if err := os.MkdirAll("logs", 0o755); err != nil {
+		return nil, fmt.Errorf("create logs dir: %w", err)
+	}
+	logDate := time.Now().Format("20060102")
+	logPath := filepath.Join("logs", fmt.Sprintf("log_%s.txt", logDate))
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file: %w", err)
+	}
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
+	log.Printf("logging initialized path=%s", logPath)
+	return logFile, nil
 }
 
 func methodGuard(method string, next http.HandlerFunc) http.HandlerFunc {
