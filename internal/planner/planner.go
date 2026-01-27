@@ -11,8 +11,7 @@ import (
 )
 
 type BotMemory struct {
-	LastSentMS int64
-	LastTopic  Topic
+	LastSentByTopic map[Topic]int64
 }
 
 type Planner struct {
@@ -208,7 +207,8 @@ func (p *Planner) shouldSuppress(serverID, botID string, topic Topic, nowMS int6
 	if !ok {
 		return false
 	}
-	if last.LastTopic == topic && nowMS-last.LastSentMS < 60000 {
+	lastSent, ok := last.LastSentByTopic[topic]
+	if ok && nowMS-lastSent < 60000 {
 		return true
 	}
 	return false
@@ -224,7 +224,12 @@ func (p *Planner) remember(serverID, botID string, topic Topic, nowMS int64) {
 	if p.memory[serverID] == nil {
 		p.memory[serverID] = make(map[string]BotMemory)
 	}
-	p.memory[serverID][botID] = BotMemory{LastSentMS: nowMS, LastTopic: topic}
+	last := p.memory[serverID][botID]
+	if last.LastSentByTopic == nil {
+		last.LastSentByTopic = make(map[Topic]int64)
+	}
+	last.LastSentByTopic[topic] = nowMS
+	p.memory[serverID][botID] = last
 }
 
 func containsTopic(topics []Topic, target Topic) bool {
