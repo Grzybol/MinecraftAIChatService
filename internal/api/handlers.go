@@ -13,6 +13,7 @@ type Handler struct {
 }
 
 func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
+	log.Printf("request_id=%s healthz", RequestIDFromContext(r.Context()))
 	respondJSON(w, http.StatusOK, HealthResponse{Status: "ok"})
 }
 
@@ -21,6 +22,7 @@ func (h *Handler) Plan(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
+		log.Printf("request_id=%s invalid plan request: %v", RequestIDFromContext(r.Context()), err)
 		respondError(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
@@ -31,7 +33,18 @@ func (h *Handler) Plan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if payload, err := json.Marshal(req); err == nil {
+		log.Printf("request_id=%s plan_request=%s", req.RequestID, string(payload))
+	} else {
+		log.Printf("request_id=%s failed to marshal plan request: %v", req.RequestID, err)
+	}
+
 	response := h.Planner.Plan(req)
+	if payload, err := json.Marshal(response); err == nil {
+		log.Printf("request_id=%s plan_response=%s", req.RequestID, string(payload))
+	} else {
+		log.Printf("request_id=%s failed to marshal plan response: %v", req.RequestID, err)
+	}
 	respondJSON(w, http.StatusOK, response)
 }
 
@@ -40,11 +53,13 @@ func (h *Handler) RegisterBots(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
+		log.Printf("request_id=%s invalid register request: %v", RequestIDFromContext(r.Context()), err)
 		respondError(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
 
 	count := h.Planner.RegisterBots(req.ServerID, req.Bots)
+	log.Printf("request_id=%s register_bots server_id=%s bots=%d registered=%d", RequestIDFromContext(r.Context()), req.ServerID, len(req.Bots), count)
 	respondJSON(w, http.StatusOK, BotRegisterResponse{Registered: count})
 }
 
