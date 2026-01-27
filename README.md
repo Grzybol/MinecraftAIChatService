@@ -12,6 +12,18 @@ AIChatPlayers is a lightweight Go HTTP JSON service that plans bot chat replies 
 go run ./cmd/server -listen :8090
 ```
 
+### Windows
+
+```powershell
+go run .\cmd\server -listen :8090
+```
+
+### Linux
+
+```bash
+go run ./cmd/server -listen :8090
+```
+
 ## Run the sample client
 
 ```bash
