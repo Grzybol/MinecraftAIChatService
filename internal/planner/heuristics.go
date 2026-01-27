@@ -9,16 +9,21 @@ import (
 	"aichatplayers/internal/util"
 )
 
-const maxRecentMessages = 10
+const maxRecentPlayerMessages = 3
 
 func detectTopics(messages []models.ChatMessage) []Topic {
 	if len(messages) == 0 {
 		return nil
 	}
 
-	recent := messages
-	if len(messages) > maxRecentMessages {
-		recent = messages[len(messages)-maxRecentMessages:]
+	recent := make([]models.ChatMessage, 0, maxRecentPlayerMessages)
+	for i := len(messages) - 1; i >= 0 && len(recent) < maxRecentPlayerMessages; i-- {
+		if strings.EqualFold(messages[i].SenderType, "PLAYER") {
+			recent = append(recent, messages[i])
+		}
+	}
+	if len(recent) == 0 {
+		return nil
 	}
 
 	topicCounts := make(map[Topic]int)
