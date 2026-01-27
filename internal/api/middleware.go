@@ -34,8 +34,9 @@ func RequestLogging(next http.Handler) http.Handler {
 		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
 		log.Printf(
-			"ts=%s request_id=%s method=%s path=%s status=%d bytes=%d duration_ms=%d remote_addr=%s user_agent=%q",
+			"ts=%s request_id=%s transaction_id=%s method=%s path=%s status=%d bytes=%d duration_ms=%d remote_addr=%s user_agent=%q",
 			start.Format(time.RFC3339),
+			reqID,
 			reqID,
 			r.Method,
 			r.URL.Path,

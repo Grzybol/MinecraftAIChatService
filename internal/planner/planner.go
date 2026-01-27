@@ -51,20 +51,20 @@ func (p *Planner) RegisterBots(serverID string, bots []models.BotProfile) int {
 }
 
 func (p *Planner) Plan(req models.PlanRequest) models.PlanResponse {
-	log.Printf("planner_plan_start request_id=%s server_id=%s tick=%d time_ms=%d bots=%d chat_messages=%d", req.RequestID, req.Server.ServerID, req.Tick, req.TimeMS, len(req.Bots), len(req.Chat))
+	log.Printf("planner_plan_start request_id=%s transaction_id=%s server_id=%s tick=%d time_ms=%d bots=%d chat_messages=%d", req.RequestID, req.RequestID, req.Server.ServerID, req.Tick, req.TimeMS, len(req.Bots), len(req.Chat))
 	rng := util.NewSeededRand(req.RequestID, fmt.Sprint(req.Tick), fmt.Sprint(req.TimeMS))
 	availableBots := filterAvailableBots(req.Bots)
 	if len(availableBots) == 0 {
-		log.Printf("planner_plan_no_available_bots request_id=%s", req.RequestID)
+		log.Printf("planner_plan_no_available_bots request_id=%s transaction_id=%s", req.RequestID, req.RequestID)
 		return models.PlanResponse{RequestID: req.RequestID}
 	}
 
 	topics := detectTopics(req.Chat)
 	settings := normalizeSettings(req.Settings)
-	log.Printf("planner_plan_context request_id=%s topics=%v available_bots=%v settings=%+v", req.RequestID, topics, botIDs(availableBots), settings)
+	log.Printf("planner_plan_context request_id=%s transaction_id=%s topics=%v available_bots=%v settings=%+v", req.RequestID, req.RequestID, topics, botIDs(availableBots), settings)
 
 	actions, strategy, suppressed := p.buildPlan(req, topics, availableBots, settings, rng)
-	log.Printf("planner_plan_result request_id=%s strategy=%s actions=%d suppressed=%d", req.RequestID, strategy, len(actions), suppressed)
+	log.Printf("planner_plan_result request_id=%s transaction_id=%s strategy=%s actions=%d suppressed=%d", req.RequestID, req.RequestID, strategy, len(actions), suppressed)
 
 	return models.PlanResponse{
 		RequestID: req.RequestID,
@@ -116,20 +116,20 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 	strategy := "heuristics"
 	if len(topics) == 0 {
 		if rng.Float64() < settings.GlobalSilenceChance {
-			log.Printf("planner_plan_silence request_id=%s reason=global_silence", req.RequestID)
+			log.Printf("planner_plan_silence request_id=%s transaction_id=%s reason=global_silence", req.RequestID, req.RequestID)
 			return nil, "silence", 1
 		}
-		log.Printf("planner_plan_small_talk request_id=%s", req.RequestID)
+		log.Printf("planner_plan_small_talk request_id=%s transaction_id=%s", req.RequestID, req.RequestID)
 		return p.smallTalkPlan(req, bots, settings, rng), "small_talk", 0
 	}
 
 	if containsTopic(topics, TopicToxic) {
-		log.Printf("planner_plan_toxic_silence request_id=%s topic=%s", req.RequestID, TopicToxic)
+		log.Printf("planner_plan_toxic_silence request_id=%s transaction_id=%s topic=%s", req.RequestID, req.RequestID, TopicToxic)
 		return nil, "toxic_silence", len(bots)
 	}
 
 	if rng.Float64() > settings.ReplyChance {
-		log.Printf("planner_plan_reply_suppressed request_id=%s reply_chance=%.2f", req.RequestID, settings.ReplyChance)
+		log.Printf("planner_plan_reply_suppressed request_id=%s transaction_id=%s reply_chance=%.2f", req.RequestID, req.RequestID, settings.ReplyChance)
 		return nil, "reply_suppressed", 1
 	}
 
@@ -137,20 +137,20 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 	suppressed := 0
 
 	selectedBots := pickBots(bots, settings.MaxActions, rng)
-	log.Printf("planner_plan_selected_bots request_id=%s bots=%v topics=%v", req.RequestID, botIDs(selectedBots), topics)
+	log.Printf("planner_plan_selected_bots request_id=%s transaction_id=%s bots=%v topics=%v", req.RequestID, req.RequestID, botIDs(selectedBots), topics)
 	for _, topic := range topics {
 		for _, bot := range selectedBots {
 			if len(actions) >= settings.MaxActions {
 				break
 			}
 			if p.shouldSuppress(req.Server.ServerID, bot.BotID, topic, req.TimeMS) {
-				log.Printf("planner_plan_suppress request_id=%s bot_id=%s topic=%s", req.RequestID, bot.BotID, topic)
+				log.Printf("planner_plan_suppress request_id=%s transaction_id=%s bot_id=%s topic=%s", req.RequestID, req.RequestID, bot.BotID, topic)
 				suppressed++
 				continue
 			}
 			message, reason := generateResponse(topic, bot, rng)
 			if message == "" {
-				log.Printf("planner_plan_no_message request_id=%s bot_id=%s topic=%s", req.RequestID, bot.BotID, topic)
+				log.Printf("planner_plan_no_message request_id=%s transaction_id=%s bot_id=%s topic=%s", req.RequestID, req.RequestID, bot.BotID, topic)
 				continue
 			}
 			actions = append(actions, models.PlannedAction{
@@ -161,7 +161,7 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 				Reason:      reason,
 			})
 			p.remember(req.Server.ServerID, bot.BotID, topic, req.TimeMS)
-			log.Printf("planner_plan_action request_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, bot.BotID, topic, reason)
+			log.Printf("planner_plan_action request_id=%s transaction_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, topic, reason)
 		}
 	}
 	return actions, strategy, suppressed
@@ -169,12 +169,12 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 
 func (p *Planner) smallTalkPlan(req models.PlanRequest, bots []models.BotProfile, settings models.PlanSettings, rng *rand.Rand) []models.PlannedAction {
 	selected := pickBots(bots, 1, rng)
-	log.Printf("planner_plan_small_talk_bots request_id=%s bots=%v", req.RequestID, botIDs(selected))
+	log.Printf("planner_plan_small_talk_bots request_id=%s transaction_id=%s bots=%v", req.RequestID, req.RequestID, botIDs(selected))
 	actions := make([]models.PlannedAction, 0, 1)
 	for _, bot := range selected {
 		message, reason := generateResponse("", bot, rng)
 		if message == "" {
-			log.Printf("planner_plan_small_talk_no_message request_id=%s bot_id=%s", req.RequestID, bot.BotID)
+			log.Printf("planner_plan_small_talk_no_message request_id=%s transaction_id=%s bot_id=%s", req.RequestID, req.RequestID, bot.BotID)
 			continue
 		}
 		actions = append(actions, models.PlannedAction{
@@ -185,7 +185,7 @@ func (p *Planner) smallTalkPlan(req models.PlanRequest, bots []models.BotProfile
 			Reason:      reason,
 		})
 		p.remember(req.Server.ServerID, bot.BotID, "small_talk", req.TimeMS)
-		log.Printf("planner_plan_small_talk_action request_id=%s bot_id=%s reason=%s", req.RequestID, bot.BotID, reason)
+		log.Printf("planner_plan_small_talk_action request_id=%s transaction_id=%s bot_id=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, reason)
 	}
 	return actions
 }
