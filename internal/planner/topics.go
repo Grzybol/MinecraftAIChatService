@@ -4,7 +4,7 @@ var (
 	greetingKeywords = []string{"siema", "hej", "czesc", "elo", "yo", "witam"}
 	pvpKeywords      = []string{"kto pvp", "pvp", "klepac", "1v1", "duel", "pojedynek"}
 	eventKeywords    = []string{"event", "start", "drop", "turniej", "boss"}
-	helpKeywords     = []string{"jak", "gdzie", "co robic", "pomoc", "help"}
+	helpKeywords     = []string{"jak zrobic", "jak wejsc", "jak dostac", "jak to", "gdzie", "co robic", "pomoc", "help"}
 	toxicKeywords    = []string{"kurwa", "chuj", "chujowy", "jebac", "idiota"}
 )
 
