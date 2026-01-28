@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 
 	"aichatplayers/internal/models"
@@ -55,6 +56,7 @@ func (p *Planner) Plan(req models.PlanRequest) models.PlanResponse {
 	log.Printf("planner_plan_start request_id=%s transaction_id=%s server_id=%s tick=%d time_ms=%d bots=%d chat_messages=%d", req.RequestID, req.RequestID, req.Server.ServerID, req.Tick, req.TimeMS, len(req.Bots), len(req.Chat))
 	rng := util.NewSeededRand(req.RequestID, fmt.Sprint(req.Tick), fmt.Sprint(req.TimeMS))
 	availableBots := filterAvailableBots(req.Bots)
+	availableBots = filterSelfReplyBots(req, availableBots)
 	if len(availableBots) == 0 {
 		log.Printf("planner_plan_no_available_bots request_id=%s transaction_id=%s", req.RequestID, req.RequestID)
 		return models.PlanResponse{RequestID: req.RequestID}
@@ -89,6 +91,48 @@ func filterAvailableBots(bots []models.BotProfile) []models.BotProfile {
 		available = append(available, bot)
 	}
 	return available
+}
+
+func filterSelfReplyBots(req models.PlanRequest, bots []models.BotProfile) []models.BotProfile {
+	last := latestChatMessage(req.Chat)
+	if last == nil {
+		return bots
+	}
+	if !strings.EqualFold(last.SenderType, "BOT") {
+		return bots
+	}
+	filtered := make([]models.BotProfile, 0, len(bots))
+	for _, bot := range bots {
+		if isSameSender(bot, *last) {
+			log.Printf("planner_plan_skip_self_reply request_id=%s transaction_id=%s bot_id=%s sender=%s", req.RequestID, req.RequestID, bot.BotID, last.Sender)
+			continue
+		}
+		filtered = append(filtered, bot)
+	}
+	return filtered
+}
+
+func latestChatMessage(messages []models.ChatMessage) *models.ChatMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	latestIndex := 0
+	for i := 1; i < len(messages); i++ {
+		if messages[i].TimestampMS >= messages[latestIndex].TimestampMS {
+			latestIndex = i
+		}
+	}
+	return &messages[latestIndex]
+}
+
+func isSameSender(bot models.BotProfile, message models.ChatMessage) bool {
+	if bot.BotID != "" && strings.EqualFold(message.Sender, bot.BotID) {
+		return true
+	}
+	if bot.Name != "" && strings.EqualFold(message.Sender, bot.Name) {
+		return true
+	}
+	return false
 }
 
 func normalizeSettings(settings models.PlanSettings) models.PlanSettings {
