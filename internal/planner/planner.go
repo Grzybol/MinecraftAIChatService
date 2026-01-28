@@ -20,6 +20,8 @@ type Planner struct {
 	registry map[string]map[string]models.BotProfile
 }
 
+const topicCooldownMS int64 = 15000
+
 func NewPlanner() *Planner {
 	return &Planner{
 		memory:   make(map[string]map[string]BotMemory),
@@ -208,7 +210,7 @@ func (p *Planner) shouldSuppress(serverID, botID string, topic Topic, nowMS int6
 		return false
 	}
 	lastSent, ok := last.LastSentByTopic[topic]
-	if ok && nowMS-lastSent < 60000 {
+	if ok && nowMS-lastSent < topicCooldownMS {
 		return true
 	}
 	return false
