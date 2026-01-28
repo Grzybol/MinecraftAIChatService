@@ -56,8 +56,8 @@ func initLogging() (*os.File, error) {
 	if err := os.MkdirAll("logs", 0o755); err != nil {
 		return nil, fmt.Errorf("create logs dir: %w", err)
 	}
-	logDate := time.Now().Format("20060102")
-	logPath := filepath.Join("logs", fmt.Sprintf("log_%s.txt", logDate))
+	logTimestamp := time.Now().Unix()
+	logPath := filepath.Join("logs", fmt.Sprintf("logs_%d", logTimestamp))
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
