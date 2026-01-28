@@ -5,6 +5,7 @@
 1. HTTP middleware assigns a request ID, logs the request, and limits body size to 1MB.
 2. `/v1/plan` validates JSON and forwards data into the planner.
 3. The planner computes topics from the most recent chat lines and builds a deterministic plan using seeded randomness.
+4. If configured, the planner asks the local LLM for a short reply and falls back to heuristics on errors or timeouts.
 
 ## Topic Detection
 
@@ -31,7 +32,8 @@ If no topics are detected, the planner either:
 
 ## Response Generation
 
-- Responses are based on static templates.
-- Bots with `tone` of `friendly` or `casual` may append a friendly emoji.
+- When the local LLM is enabled, the planner constructs a persona-aware prompt (language, tone, style tags, avoid topics, knowledge level) and requests a single short chat message.
+- If the LLM is unavailable, returns an error, or times out, the planner falls back to static templates.
+- Bots with `tone` of `friendly` or `casual` may append a friendly emoji when using heuristics.
 - `avoid_topics` can suppress replies related to the topic (supports strings containing `pvp` or `event`).
-- `knowledge_level: newbie` adds a beginner-style prefix to replies.
+- `knowledge_level: newbie` adds a beginner-style prefix to heuristic replies.

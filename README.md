@@ -1,6 +1,6 @@
 # AIChatPlayers
 
-AIChatPlayers is a lightweight Go HTTP JSON service that plans bot chat replies for Minecraft servers using deterministic heuristics. It analyzes recent chat, bot personas, and server context to schedule short messages without relying on an LLM.
+AIChatPlayers is a lightweight Go HTTP JSON service that plans bot chat replies for Minecraft servers. It analyzes recent chat, bot personas, and server context to schedule short messages using a local LLM when configured, with heuristics as a fallback.
 
 ## Requirements
 
@@ -11,6 +11,27 @@ AIChatPlayers is a lightweight Go HTTP JSON service that plans bot chat replies 
 ```bash
 go run ./cmd/server -listen :8090
 ```
+
+## Local LLM configuration
+
+The planner can call a local `llama.cpp`-compatible model (GGUF) via the `llama-cli` binary. If the model is unavailable or times out, the service falls back to heuristics.
+
+Set the configuration via environment variables or a `.env` file in the repo root:
+
+```bash
+LLM_MODEL_PATH=/models/deepseek-1b.gguf
+LLM_COMMAND=llama-cli
+LLM_MAX_RAM_MB=1024
+LLM_NUM_THREADS=6
+LLM_CTX_SIZE=2048
+LLM_TIMEOUT_MS=2000
+LLM_TEMPERATURE=0.6
+LLM_TOP_P=0.9
+```
+
+Notes:
+- `LLM_COMMAND` defaults to `llama-cli` on your `PATH`.
+- `LLM_MAX_RAM_MB` sets the Go memory limit before model execution.
 
 ### Windows
 

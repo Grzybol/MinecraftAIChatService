@@ -19,14 +19,19 @@ type Planner struct {
 	mu       sync.Mutex
 	memory   map[string]map[string]BotMemory
 	registry map[string]map[string]models.BotProfile
+	llm      LLMGenerator
 }
 
 const topicCooldownMS int64 = 15000
 
-func NewPlanner() *Planner {
+func NewPlanner(generator LLMGenerator) *Planner {
+	if generator == nil {
+		generator = noopLLM{}
+	}
 	return &Planner{
 		memory:   make(map[string]map[string]BotMemory),
 		registry: make(map[string]map[string]models.BotProfile),
+		llm:      generator,
 	}
 }
 
@@ -165,7 +170,8 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 			return nil, "silence", 1
 		}
 		log.Printf("planner_plan_small_talk request_id=%s transaction_id=%s", req.RequestID, req.RequestID)
-		return p.smallTalkPlan(req, bots, settings, rng), "small_talk", 0
+		actions, llmAttempted, llmUsed := p.smallTalkPlan(req, bots, settings, rng)
+		return actions, strategyLabel("small_talk", llmAttempted, llmUsed), 0
 	}
 
 	if containsTopic(topics, TopicToxic) {
@@ -180,6 +186,8 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 
 	actions := make([]models.PlannedAction, 0, settings.MaxActions)
 	suppressed := 0
+	llmAttempted := false
+	llmUsed := false
 
 	selectedBots := pickBots(bots, settings.MaxActions, rng)
 	log.Printf("planner_plan_selected_bots request_id=%s transaction_id=%s bots=%v topics=%v", req.RequestID, req.RequestID, botIDs(selectedBots), topics)
@@ -193,7 +201,13 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 				suppressed++
 				continue
 			}
-			message, reason := generateResponse(topic, bot, rng)
+			message, reason, attempted, used := p.generateMessage(req, topic, bot, rng)
+			if attempted {
+				llmAttempted = true
+			}
+			if used {
+				llmUsed = true
+			}
 			if message == "" {
 				log.Printf("planner_plan_no_message request_id=%s transaction_id=%s bot_id=%s topic=%s", req.RequestID, req.RequestID, bot.BotID, topic)
 				continue
@@ -209,15 +223,23 @@ func (p *Planner) buildPlan(req models.PlanRequest, topics []Topic, bots []model
 			log.Printf("planner_plan_action request_id=%s transaction_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, topic, reason)
 		}
 	}
-	return actions, strategy, suppressed
+	return actions, strategyLabel(strategy, llmAttempted, llmUsed), suppressed
 }
 
-func (p *Planner) smallTalkPlan(req models.PlanRequest, bots []models.BotProfile, settings models.PlanSettings, rng *rand.Rand) []models.PlannedAction {
+func (p *Planner) smallTalkPlan(req models.PlanRequest, bots []models.BotProfile, settings models.PlanSettings, rng *rand.Rand) ([]models.PlannedAction, bool, bool) {
 	selected := pickBots(bots, 1, rng)
 	log.Printf("planner_plan_small_talk_bots request_id=%s transaction_id=%s bots=%v", req.RequestID, req.RequestID, botIDs(selected))
 	actions := make([]models.PlannedAction, 0, 1)
+	llmAttempted := false
+	llmUsed := false
 	for _, bot := range selected {
-		message, reason := generateResponse("", bot, rng)
+		message, reason, attempted, used := p.generateMessage(req, "", bot, rng)
+		if attempted {
+			llmAttempted = true
+		}
+		if used {
+			llmUsed = true
+		}
 		if message == "" {
 			log.Printf("planner_plan_small_talk_no_message request_id=%s transaction_id=%s bot_id=%s", req.RequestID, req.RequestID, bot.BotID)
 			continue
@@ -232,7 +254,7 @@ func (p *Planner) smallTalkPlan(req models.PlanRequest, bots []models.BotProfile
 		p.remember(req.Server.ServerID, bot.BotID, "small_talk", req.TimeMS)
 		log.Printf("planner_plan_small_talk_action request_id=%s transaction_id=%s bot_id=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, reason)
 	}
-	return actions
+	return actions, llmAttempted, llmUsed
 }
 
 func (p *Planner) shouldSuppress(serverID, botID string, topic Topic, nowMS int64) bool {
