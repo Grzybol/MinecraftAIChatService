@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"aichatplayers/internal/api"
+	"aichatplayers/internal/config"
+	"aichatplayers/internal/llm"
 	"aichatplayers/internal/planner"
 )
 
@@ -28,7 +30,21 @@ func main() {
 		defer logFile.Close()
 	}
 
-	plan := planner.NewPlanner()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	llmClient, err := llm.NewClient(cfg.LLM)
+	if err != nil {
+		log.Printf("llm_init_failed error=%v fallback=heuristics", err)
+	}
+	defer llmClient.Close()
+	if llmClient.Enabled() {
+		log.Printf("llm_enabled model_path=%s ctx=%d threads=%d timeout=%s", cfg.LLM.ModelPath, cfg.LLM.CtxSize, cfg.LLM.NumThreads, cfg.LLM.Timeout)
+	}
+
+	plan := planner.NewPlanner(llmClient)
 	h := &api.Handler{Planner: plan}
 
 	mux := http.NewServeMux()
