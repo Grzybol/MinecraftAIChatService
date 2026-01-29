@@ -14,7 +14,7 @@ go run ./cmd/server -listen :8090
 
 ## Local LLM configuration
 
-The planner can call a local `llama.cpp`-compatible model (GGUF) via the `llama-cli` binary. If the model is unavailable or times out, the service falls back to heuristics.
+The planner can call a local `llama.cpp`-compatible model (GGUF) via the `llama-cli` binary. If the model is unavailable or times out, the service falls back to heuristics. The service does not download models automatically; you must provide the GGUF file yourself (for example, in the `models/` directory).
 
 Set the configuration via environment variables or a `.env` file in the repo root:
 
