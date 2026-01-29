@@ -107,10 +107,15 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 	}
 
 	cmd := exec.CommandContext(ctx, c.command, args...)
+	configureCommand(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("llm timeout after %s", timeout)
+		}
+		trimmed := strings.TrimSpace(string(output))
+		if trimmed != "" {
+			return "", fmt.Errorf("llm command failed: %w output=%s", err, trimmed)
 		}
 		return "", fmt.Errorf("llm command failed: %w", err)
 	}
