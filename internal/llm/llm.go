@@ -1,9 +1,13 @@
 package llm
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime/debug"
@@ -35,6 +39,13 @@ type Client struct {
 	enabled bool
 }
 
+type ServerClient struct {
+	cfg     config.LLMConfig
+	url     string
+	client  *http.Client
+	enabled bool
+}
+
 type Noop struct{}
 
 func (Noop) Enabled() bool { return false }
@@ -46,6 +57,9 @@ func (Noop) Generate(ctx context.Context, req Request) (string, error) {
 func (Noop) Close() error { return nil }
 
 func NewClient(cfg config.LLMConfig) (Generator, error) {
+	if strings.TrimSpace(cfg.ServerURL) != "" {
+		return newServerClient(cfg), nil
+	}
 	if cfg.ModelPath == "" {
 		return Noop{}, nil
 	}
@@ -85,11 +99,7 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 		return "", errors.New("llm prompt empty")
 	}
 
-	timeout := c.cfg.Timeout
-	if timeout <= 0 {
-		timeout = 2 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := withTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 
 	args := []string{
@@ -111,7 +121,7 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", fmt.Errorf("llm timeout after %s", timeout)
+			return "", fmt.Errorf("llm timeout after %s", timeoutLabel(c.cfg.Timeout))
 		}
 		trimmed := strings.TrimSpace(string(output))
 		if trimmed != "" {
@@ -120,17 +130,147 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 		return "", fmt.Errorf("llm command failed: %w", err)
 	}
 
-	response := strings.TrimSpace(string(output))
+	response := sanitizeResponse(prompt, string(output))
+	if response == "" {
+		return "", errors.New("llm returned empty response")
+	}
+	return response, nil
+}
+
+func (c *ServerClient) Enabled() bool {
+	if c == nil {
+		return false
+	}
+	return c.enabled
+}
+
+func (c *ServerClient) Close() error {
+	return nil
+}
+
+func (c *ServerClient) Generate(ctx context.Context, req Request) (string, error) {
+	if c == nil || !c.enabled {
+		return "", errors.New("llm disabled")
+	}
+	prompt := buildPrompt(req)
+	if strings.TrimSpace(prompt) == "" {
+		return "", errors.New("llm prompt empty")
+	}
+
+	ctx, cancel := withTimeout(ctx, c.cfg.Timeout)
+	defer cancel()
+
+	payload := map[string]any{
+		"prompt":      prompt,
+		"n_predict":   defaultMaxTokens,
+		"temperature": c.cfg.Temperature,
+		"top_p":       c.cfg.TopP,
+		"stream":      false,
+	}
+	if c.cfg.CtxSize > 0 {
+		payload["n_ctx"] = c.cfg.CtxSize
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("llm server request encode: %w", err)
+	}
+
+	endpoint := strings.TrimRight(c.url, "/") + "/completion"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("llm server request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(request)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("llm timeout after %s", timeoutLabel(c.cfg.Timeout))
+		}
+		return "", fmt.Errorf("llm server request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("llm server read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		trimmed := strings.TrimSpace(string(responseBody))
+		if trimmed != "" {
+			return "", fmt.Errorf("llm server response status=%d body=%s", resp.StatusCode, trimmed)
+		}
+		return "", fmt.Errorf("llm server response status=%d", resp.StatusCode)
+	}
+
+	response := parseServerResponse(prompt, responseBody)
+	if response == "" {
+		return "", errors.New("llm returned empty response")
+	}
+	return response, nil
+}
+
+func newServerClient(cfg config.LLMConfig) *ServerClient {
+	return &ServerClient{
+		cfg:     cfg,
+		url:     strings.TrimSpace(cfg.ServerURL),
+		client:  &http.Client{},
+		enabled: true,
+	}
+}
+
+func withTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return context.WithCancel(ctx)
+	}
+	effective := timeoutLabel(timeout)
+	return context.WithTimeout(ctx, effective)
+}
+
+func timeoutLabel(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return 2 * time.Second
+	}
+	return timeout
+}
+
+func parseServerResponse(prompt string, payload []byte) string {
+	var completion struct {
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(payload, &completion); err == nil && completion.Content != "" {
+		return sanitizeResponse(prompt, completion.Content)
+	}
+
+	var openAI struct {
+		Choices []struct {
+			Text    string `json:"text"`
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(payload, &openAI); err == nil && len(openAI.Choices) > 0 {
+		choice := openAI.Choices[0]
+		if choice.Message.Content != "" {
+			return sanitizeResponse(prompt, choice.Message.Content)
+		}
+		if choice.Text != "" {
+			return sanitizeResponse(prompt, choice.Text)
+		}
+	}
+	return ""
+}
+
+func sanitizeResponse(prompt, output string) string {
+	response := strings.TrimSpace(output)
 	response = strings.TrimPrefix(response, prompt)
 	response = strings.TrimSpace(response)
 	if idx := strings.Index(response, "\n"); idx >= 0 {
 		response = strings.TrimSpace(response[:idx])
 	}
-	response = strings.Trim(response, "\"")
-	if response == "" {
-		return "", errors.New("llm returned empty response")
-	}
-	return response, nil
+	return strings.Trim(response, "\"")
 }
 
 func buildPrompt(req Request) string {

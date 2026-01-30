@@ -14,12 +14,13 @@ go run ./cmd/server -listen :8090
 
 ## Local LLM configuration
 
-The planner can call a local `llama.cpp`-compatible model (GGUF) via the `llama-cli` binary. If the model is unavailable or times out, the service falls back to heuristics. The service does not download models automatically; you must provide the GGUF file yourself (for example, in the `models/` directory).
+The planner can call a local `llama.cpp`-compatible model (GGUF) via the `llama-cli` binary or an already-running `llama.cpp` server. If the model is unavailable or times out, the service falls back to heuristics. The service does not download models automatically; you must provide the GGUF file yourself (for example, in the `models/` directory).
 
 Set the configuration via environment variables or a `.env` file in the repo root:
 
 ```bash
 LLM_MODEL_PATH=/models/deepseek-1b.gguf
+LLM_SERVER_URL=http://127.0.0.1:8080
 LLM_COMMAND=llama-cli
 LLM_MAX_RAM_MB=1024
 LLM_NUM_THREADS=6
@@ -32,6 +33,7 @@ LLM_TOP_P=0.9
 Notes:
 - `LLM_COMMAND` defaults to `llama-cli` on your `PATH`.
 - `LLM_MAX_RAM_MB` sets the Go memory limit before model execution.
+- `LLM_SERVER_URL` enables calling a running `llama.cpp` server (uses the `/completion` endpoint) instead of spawning `llama-cli` for every request.
 
 ### Windows
 
