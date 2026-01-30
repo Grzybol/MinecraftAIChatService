@@ -24,6 +24,7 @@ type Config struct {
 
 type LLMConfig struct {
 	ModelPath   string
+	ServerURL   string
 	Command     string
 	MaxRAMMB    int
 	NumThreads  int
@@ -42,6 +43,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		LLM: LLMConfig{
 			ModelPath:   strings.TrimSpace(os.Getenv("LLM_MODEL_PATH")),
+			ServerURL:   strings.TrimSpace(os.Getenv("LLM_SERVER_URL")),
 			Command:     strings.TrimSpace(os.Getenv("LLM_COMMAND")),
 			MaxRAMMB:    defaultLLMMaxRAMMB,
 			NumThreads:  0,
