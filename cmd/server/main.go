@@ -35,6 +35,14 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
+	serverProcess, err := llm.EnsureServerReady(cfg.LLM)
+	if err != nil {
+		log.Printf("llm_server_start_failed error=%v fallback=heuristics", err)
+	}
+	if serverProcess != nil {
+		defer serverProcess.Close()
+	}
+
 	llmClient, err := llm.NewClient(cfg.LLM)
 	if err != nil {
 		log.Printf("llm_init_failed error=%v fallback=heuristics", err)

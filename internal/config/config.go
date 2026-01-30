@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	defaultLLMCtxSize     = 2048
-	defaultLLMTimeoutMS   = 2000
-	defaultLLMTemperature = 0.6
-	defaultLLMTopP        = 0.9
-	defaultLLMMaxRAMMB    = 1024
+	defaultLLMCtxSize              = 2048
+	defaultLLMTimeoutMS            = 2000
+	defaultLLMTemperature          = 0.6
+	defaultLLMTopP                 = 0.9
+	defaultLLMMaxRAMMB             = 1024
+	defaultLLMServerStartupTimeout = 60 * time.Second
 )
 
 type Config struct {
@@ -23,16 +24,18 @@ type Config struct {
 }
 
 type LLMConfig struct {
-	ModelPath   string
-	ServerURL   string
-	Command     string
-	MaxRAMMB    int
-	NumThreads  int
-	CtxSize     int
-	Timeout     time.Duration
-	SoftTimeout time.Duration
-	Temperature float64
-	TopP        float64
+	ModelPath            string
+	ServerURL            string
+	ServerCommand        string
+	Command              string
+	MaxRAMMB             int
+	NumThreads           int
+	CtxSize              int
+	Timeout              time.Duration
+	SoftTimeout          time.Duration
+	ServerStartupTimeout time.Duration
+	Temperature          float64
+	TopP                 float64
 }
 
 func Load() (Config, error) {
@@ -42,15 +45,17 @@ func Load() (Config, error) {
 
 	cfg := Config{
 		LLM: LLMConfig{
-			ModelPath:   strings.TrimSpace(os.Getenv("LLM_MODEL_PATH")),
-			ServerURL:   strings.TrimSpace(os.Getenv("LLM_SERVER_URL")),
-			Command:     strings.TrimSpace(os.Getenv("LLM_COMMAND")),
-			MaxRAMMB:    defaultLLMMaxRAMMB,
-			NumThreads:  0,
-			CtxSize:     defaultLLMCtxSize,
-			Timeout:     time.Duration(defaultLLMTimeoutMS) * time.Millisecond,
-			Temperature: defaultLLMTemperature,
-			TopP:        defaultLLMTopP,
+			ModelPath:            strings.TrimSpace(os.Getenv("LLM_MODEL_PATH")),
+			ServerURL:            strings.TrimSpace(os.Getenv("LLM_SERVER_URL")),
+			ServerCommand:        strings.TrimSpace(os.Getenv("LLM_SERVER_COMMAND")),
+			Command:              strings.TrimSpace(os.Getenv("LLM_COMMAND")),
+			MaxRAMMB:             defaultLLMMaxRAMMB,
+			NumThreads:           0,
+			CtxSize:              defaultLLMCtxSize,
+			Timeout:              time.Duration(defaultLLMTimeoutMS) * time.Millisecond,
+			ServerStartupTimeout: defaultLLMServerStartupTimeout,
+			Temperature:          defaultLLMTemperature,
+			TopP:                 defaultLLMTopP,
 		},
 	}
 
@@ -88,6 +93,12 @@ func Load() (Config, error) {
 		cfg.LLM.SoftTimeout = time.Duration(value) * time.Millisecond
 	}
 
+	if value, ok, err := readEnvInt("LLM_SERVER_STARTUP_TIMEOUT_MS"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.ServerStartupTimeout = time.Duration(value) * time.Millisecond
+	}
+
 	if value, ok, err := readEnvFloat("LLM_TEMPERATURE"); err != nil {
 		return Config{}, err
 	} else if ok {
@@ -120,6 +131,9 @@ func Load() (Config, error) {
 	}
 	if cfg.LLM.SoftTimeout < 0 {
 		return Config{}, errors.New("LLM_SOFT_TIMEOUT_MS must be >= 0")
+	}
+	if cfg.LLM.ServerStartupTimeout < 0 {
+		return Config{}, errors.New("LLM_SERVER_STARTUP_TIMEOUT_MS must be >= 0")
 	}
 	if cfg.LLM.Timeout > 0 && cfg.LLM.SoftTimeout > cfg.LLM.Timeout {
 		cfg.LLM.SoftTimeout = cfg.LLM.Timeout
