@@ -29,6 +29,7 @@ type LLMConfig struct {
 	NumThreads  int
 	CtxSize     int
 	Timeout     time.Duration
+	SoftTimeout time.Duration
 	Temperature float64
 	TopP        float64
 }
@@ -74,6 +75,16 @@ func Load() (Config, error) {
 	} else if ok {
 		cfg.LLM.Timeout = time.Duration(value) * time.Millisecond
 	}
+	cfg.LLM.SoftTimeout = cfg.LLM.Timeout
+	if cfg.LLM.SoftTimeout > time.Second {
+		cfg.LLM.SoftTimeout -= time.Second
+	}
+
+	if value, ok, err := readEnvInt("LLM_SOFT_TIMEOUT_MS"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.SoftTimeout = time.Duration(value) * time.Millisecond
+	}
 
 	if value, ok, err := readEnvFloat("LLM_TEMPERATURE"); err != nil {
 		return Config{}, err
@@ -104,6 +115,12 @@ func Load() (Config, error) {
 	}
 	if cfg.LLM.Timeout < 0 {
 		return Config{}, errors.New("LLM_TIMEOUT_MS must be >= 0")
+	}
+	if cfg.LLM.SoftTimeout < 0 {
+		return Config{}, errors.New("LLM_SOFT_TIMEOUT_MS must be >= 0")
+	}
+	if cfg.LLM.Timeout > 0 && cfg.LLM.SoftTimeout > cfg.LLM.Timeout {
+		cfg.LLM.SoftTimeout = cfg.LLM.Timeout
 	}
 	return cfg, nil
 }
