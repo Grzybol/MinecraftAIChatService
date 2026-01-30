@@ -21,6 +21,11 @@ func resolveModelPath(cfg *config.LLMConfig) string {
 		if fileExists(modelPath) {
 			return modelPath
 		}
+		if alt := windowsTrimRootedPath(modelPath); alt != "" && alt != modelPath && fileExists(alt) {
+			logging.Infof("llm_model_path_resolved original=%s resolved=%s", modelPath, alt)
+			cfg.ModelPath = alt
+			return alt
+		}
 		for _, dir := range modelDirCandidates(cfg) {
 			candidate := filepath.Join(dir, modelPath)
 			if fileExists(candidate) {
@@ -69,7 +74,12 @@ func resolveCommandPath(command string, defaultName string, cfg *config.LLMConfi
 
 func modelDirCandidates(cfg *config.LLMConfig) []string {
 	if cfg != nil && strings.TrimSpace(cfg.ModelsDir) != "" {
-		return []string{strings.TrimSpace(cfg.ModelsDir)}
+		dir := strings.TrimSpace(cfg.ModelsDir)
+		candidates := []string{dir}
+		if alt := windowsTrimRootedPath(dir); alt != "" && alt != dir {
+			candidates = append(candidates, alt)
+		}
+		return candidates
 	}
 	return []string{"models", string(filepath.Separator) + "models"}
 }
@@ -116,4 +126,21 @@ func fileExists(path string) bool {
 		return false
 	}
 	return true
+}
+
+func windowsTrimRootedPath(value string) string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	cleaned := filepath.Clean(value)
+	if filepath.VolumeName(cleaned) != "" {
+		return ""
+	}
+	if strings.HasPrefix(cleaned, string(filepath.Separator)) {
+		return strings.TrimLeft(cleaned, string(filepath.Separator))
+	}
+	if strings.HasPrefix(cleaned, "/") {
+		return strings.TrimLeft(cleaned, "/")
+	}
+	return ""
 }
