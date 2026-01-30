@@ -139,7 +139,7 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 		return "", fmt.Errorf("llm command failed: %w", err)
 	}
 
-	response := sanitizeResponse(prompt, string(output))
+	response := sanitizeResponse(prompt, string(output), req.Bot.Name)
 	if response == "" {
 		return "", errors.New("llm returned empty response")
 	}
@@ -213,7 +213,7 @@ func (c *ServerClient) Generate(ctx context.Context, req Request) (string, error
 		return "", fmt.Errorf("llm server response status=%d", resp.StatusCode)
 	}
 
-	response := parseServerResponse(prompt, responseBody)
+	response := parseServerResponse(prompt, req.Bot.Name, responseBody)
 	if response == "" {
 		return "", errors.New("llm returned empty response")
 	}
@@ -244,12 +244,12 @@ func timeoutLabel(timeout time.Duration) time.Duration {
 	return timeout
 }
 
-func parseServerResponse(prompt string, payload []byte) string {
+func parseServerResponse(prompt, botName string, payload []byte) string {
 	var completion struct {
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(payload, &completion); err == nil && completion.Content != "" {
-		return sanitizeResponse(prompt, completion.Content)
+		return sanitizeResponse(prompt, completion.Content, botName)
 	}
 
 	var openAI struct {
@@ -263,23 +263,36 @@ func parseServerResponse(prompt string, payload []byte) string {
 	if err := json.Unmarshal(payload, &openAI); err == nil && len(openAI.Choices) > 0 {
 		choice := openAI.Choices[0]
 		if choice.Message.Content != "" {
-			return sanitizeResponse(prompt, choice.Message.Content)
+			return sanitizeResponse(prompt, choice.Message.Content, botName)
 		}
 		if choice.Text != "" {
-			return sanitizeResponse(prompt, choice.Text)
+			return sanitizeResponse(prompt, choice.Text, botName)
 		}
 	}
 	return ""
 }
 
-func sanitizeResponse(prompt, output string) string {
+func sanitizeResponse(prompt, output, botName string) string {
 	response := strings.TrimSpace(output)
 	response = strings.TrimPrefix(response, prompt)
 	response = strings.TrimSpace(response)
 	if idx := strings.Index(response, "\n"); idx >= 0 {
 		response = strings.TrimSpace(response[:idx])
 	}
-	return strings.Trim(response, "\"")
+	response = strings.Trim(response, "\"")
+	return stripBotPrefix(response, botName)
+}
+
+func stripBotPrefix(message, botName string) string {
+	if botName == "" {
+		return message
+	}
+	prefix := ":" + botName + ":"
+	if strings.HasPrefix(strings.ToLower(message), strings.ToLower(prefix)) {
+		trimmed := strings.TrimSpace(message[len(prefix):])
+		return strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+	}
+	return message
 }
 
 func buildPrompt(req Request) string {
@@ -295,6 +308,9 @@ func buildPrompt(req Request) string {
 		sb.WriteString("Language: ")
 		sb.WriteString(persona.Language)
 		sb.WriteString("\n")
+		sb.WriteString("Odpowiadaj wyłącznie w języku ")
+		sb.WriteString(persona.Language)
+		sb.WriteString(".\n")
 	}
 	if persona.Tone != "" {
 		sb.WriteString("Tone: ")
@@ -348,6 +364,6 @@ func buildPrompt(req Request) string {
 			sb.WriteString("\n")
 		}
 	}
-	sb.WriteString("Respond with a single short chat message. Do not add quotes or extra commentary.\n")
+	sb.WriteString("Respond with a single short chat message. Do not add quotes, bot name prefixes, or extra commentary.\n")
 	return sb.String()
 }
