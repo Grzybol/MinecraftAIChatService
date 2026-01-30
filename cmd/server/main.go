@@ -24,17 +24,17 @@ func main() {
 	listenAddr := flag.String("listen", ":8090", "http listen address")
 	flag.Parse()
 
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
 	logFile, err := initLogging()
 	if err != nil {
-		logging.Fatalf("failed to init logging: %v", err)
+		log.Fatalf("failed to init logging: %v", err)
 	}
 	if logFile != nil {
 		defer logFile.Close()
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		logging.Fatalf("failed to load config: %v", err)
 	}
 
 	serverProcess, err := llm.EnsureServerReady(cfg.LLM)
