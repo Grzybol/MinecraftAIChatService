@@ -13,6 +13,7 @@ import (
 	"aichatplayers/internal/api"
 	"aichatplayers/internal/config"
 	"aichatplayers/internal/llm"
+	"aichatplayers/internal/logging"
 	"aichatplayers/internal/planner"
 )
 
@@ -24,7 +25,7 @@ func main() {
 
 	logFile, err := initLogging()
 	if err != nil {
-		log.Fatalf("failed to init logging: %v", err)
+		logging.Fatalf("failed to init logging: %v", err)
 	}
 	if logFile != nil {
 		defer logFile.Close()
@@ -32,12 +33,12 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		logging.Fatalf("failed to load config: %v", err)
 	}
 
 	serverProcess, err := llm.EnsureServerReady(cfg.LLM)
 	if err != nil {
-		log.Printf("llm_server_start_failed error=%v fallback=heuristics", err)
+		logging.Errorf("llm_server_start_failed error=%v fallback=heuristics", err)
 	}
 	if serverProcess != nil {
 		defer serverProcess.Close()
@@ -45,11 +46,11 @@ func main() {
 
 	llmClient, err := llm.NewClient(cfg.LLM)
 	if err != nil {
-		log.Printf("llm_init_failed error=%v fallback=heuristics", err)
+		logging.Errorf("llm_init_failed error=%v fallback=heuristics", err)
 	}
 	defer llmClient.Close()
 	if llmClient.Enabled() {
-		log.Printf("llm_enabled model_path=%s ctx=%d threads=%d timeout=%s soft_timeout=%s", cfg.LLM.ModelPath, cfg.LLM.CtxSize, cfg.LLM.NumThreads, cfg.LLM.Timeout, cfg.LLM.SoftTimeout)
+		logging.Infof("llm_enabled model_path=%s ctx=%d threads=%d timeout=%s soft_timeout=%s", cfg.LLM.ModelPath, cfg.LLM.CtxSize, cfg.LLM.NumThreads, cfg.LLM.Timeout, cfg.LLM.SoftTimeout)
 	}
 
 	plan := planner.NewPlanner(llmClient, planner.Config{LLMTimeout: cfg.LLM.SoftTimeout})
@@ -70,9 +71,9 @@ func main() {
 		IdleTimeout:  30 * time.Second,
 	}
 
-	log.Printf("listening on %s", *listenAddr)
+	logging.Infof("listening on %s", *listenAddr)
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("server stopped: %v", err)
+		logging.Fatalf("server stopped: %v", err)
 	}
 }
 
@@ -86,9 +87,10 @@ func initLogging() (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
+	logging.SetLevelFromEnv("LOG_LEVEL")
 	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
-	log.Printf("logging initialized path=%s", logPath)
+	logging.Infof("logging initialized path=%s", logPath)
 	return logFile, nil
 }
 

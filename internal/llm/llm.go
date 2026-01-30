@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"aichatplayers/internal/config"
+	"aichatplayers/internal/logging"
 	"aichatplayers/internal/models"
 )
 
@@ -57,24 +58,31 @@ func (Noop) Generate(ctx context.Context, req Request) (string, error) {
 func (Noop) Close() error { return nil }
 
 func NewClient(cfg config.LLMConfig) (Generator, error) {
+	logging.Debugf("llm_client_init server_url=%q model_path=%q command=%q server_command=%q", cfg.ServerURL, cfg.ModelPath, cfg.Command, cfg.ServerCommand)
 	if strings.TrimSpace(cfg.ServerURL) != "" {
+		logging.Debugf("llm_client_mode server url configured")
 		return newServerClient(cfg), nil
 	}
 	if cfg.ModelPath == "" {
+		logging.Debugf("llm_client_disabled reason=missing_model_path")
 		return Noop{}, nil
 	}
 	if cfg.Command == "" {
 		cfg.Command = "llama-cli"
 	}
 	if _, err := os.Stat(cfg.ModelPath); err != nil {
+		logging.Warnf("llm_client_model_unavailable path=%s error=%v", cfg.ModelPath, err)
 		return Noop{}, fmt.Errorf("llm model path unavailable: %w", err)
 	}
 	command, err := exec.LookPath(cfg.Command)
 	if err != nil {
+		logging.Warnf("llm_client_command_missing command=%s error=%v", cfg.Command, err)
 		return Noop{}, fmt.Errorf("llm command not found: %w", err)
 	}
+	logging.Debugf("llm_client_command_resolved command=%s path=%s", cfg.Command, command)
 	if cfg.MaxRAMMB > 0 {
 		debug.SetMemoryLimit(int64(cfg.MaxRAMMB) * 1024 * 1024)
+		logging.Debugf("llm_client_memory_limit_set max_ram_mb=%d", cfg.MaxRAMMB)
 	}
 	return &Client{cfg: cfg, command: command, enabled: true}, nil
 }

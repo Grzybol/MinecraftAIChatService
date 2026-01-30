@@ -6,11 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
 	"aichatplayers/internal/api"
+	"aichatplayers/internal/logging"
 )
 
 func main() {
@@ -20,18 +20,18 @@ func main() {
 	payload := sampleRequest()
 	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatalf("marshal request: %v", err)
+		logging.Fatalf("marshal request: %v", err)
 	}
 
 	resp, err := http.Post(*url+"/v1/plan", "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Fatalf("request failed: %v", err)
+		logging.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatalf("read response: %v", err)
+		logging.Fatalf("read response: %v", err)
 	}
 
 	fmt.Printf("status: %s\n", resp.Status)
