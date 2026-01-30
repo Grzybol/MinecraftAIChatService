@@ -276,104 +276,210 @@ func sanitizeResponse(prompt, output, botName string) string {
 	response := strings.TrimSpace(output)
 	response = strings.TrimPrefix(response, prompt)
 	response = strings.TrimSpace(response)
-	if idx := strings.Index(response, "\n"); idx >= 0 {
-		response = strings.TrimSpace(response[:idx])
-	}
-	response = strings.Trim(response, "\"")
-	return stripBotPrefix(response, botName)
+	return normalizeLLMOutput(response, botName)
 }
 
 func stripBotPrefix(message, botName string) string {
 	if botName == "" {
 		return message
 	}
-	prefix := ":" + botName + ":"
-	if strings.HasPrefix(strings.ToLower(message), strings.ToLower(prefix)) {
-		trimmed := strings.TrimSpace(message[len(prefix):])
-		return strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+	trimmed := strings.TrimSpace(message)
+	lower := strings.ToLower(trimmed)
+	lowerBot := strings.ToLower(botName)
+	separators := []string{":", "-", " -", " —", "–"}
+	for _, sep := range separators {
+		prefix := lowerBot + sep
+		if strings.HasPrefix(lower, prefix) {
+			rest := strings.TrimSpace(trimmed[len(prefix):])
+			return strings.TrimSpace(strings.TrimLeft(rest, "-—–"))
+		}
 	}
-	return message
+	return trimmed
+}
+
+func normalizeLLMOutput(output, botName string) string {
+	line := firstNonEmptyLine(output)
+	if line == "" {
+		return "__SILENCE__"
+	}
+	if strings.EqualFold(strings.TrimSpace(line), "__SILENCE__") {
+		return "__SILENCE__"
+	}
+	line = stripBotMarkers(line)
+	line = stripQuotes(line)
+	line = stripBotPrefix(line, botName)
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "__SILENCE__"
+	}
+	if runeCount(line) > 80 {
+		line = truncateRunes(line, 80)
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return "__SILENCE__"
+		}
+	}
+	if isForbiddenOutput(line, botName) {
+		return "__SILENCE__"
+	}
+	return line
+}
+
+func firstNonEmptyLine(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func stripQuotes(value string) string {
+	value = strings.ReplaceAll(value, "\"", "")
+	value = strings.ReplaceAll(value, "'", "")
+	return value
+}
+
+func stripBotMarkers(value string) string {
+	lower := strings.ToLower(value)
+	for {
+		idx := strings.Index(lower, "(bot)")
+		if idx == -1 {
+			return value
+		}
+		value = value[:idx] + value[idx+len("(bot)"):]
+		lower = strings.ToLower(value)
+	}
+}
+
+func isForbiddenOutput(value, botName string) bool {
+	if strings.Contains(value, "\"") || strings.Contains(value, "'") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(value), "(bot)") {
+		return true
+	}
+	if botName != "" {
+		trimmed := strings.TrimSpace(value)
+		lower := strings.ToLower(trimmed)
+		lowerBot := strings.ToLower(botName)
+		if strings.HasPrefix(lower, lowerBot+":") {
+			return true
+		}
+	}
+	return false
+}
+
+func runeCount(value string) int {
+	count := 0
+	for range value {
+		count++
+	}
+	return count
+}
+
+func truncateRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if runeCount(value) <= limit {
+		return value
+	}
+	var sb strings.Builder
+	sb.Grow(len(value))
+	count := 0
+	for _, r := range value {
+		if count >= limit {
+			break
+		}
+		sb.WriteRune(r)
+		count++
+	}
+	return sb.String()
 }
 
 func buildPrompt(req Request, cfg config.LLMConfig) string {
 	var sb strings.Builder
 	promptSystem := strings.TrimSpace(cfg.PromptSystem)
 	if promptSystem == "" {
-		promptSystem = "You are a Minecraft chat bot."
-	}
-	sb.WriteString(promptSystem)
-	sb.WriteString("\n")
-	if req.Bot.Name != "" {
-		sb.WriteString("Bot name: ")
-		sb.WriteString(req.Bot.Name)
-		sb.WriteString("\n")
-	}
-	persona := req.Bot.Persona
-	if persona.Language != "" {
-		sb.WriteString("Language: ")
-		sb.WriteString(persona.Language)
-		sb.WriteString("\n")
-		sb.WriteString("Odpowiadaj wyłącznie w języku ")
-		sb.WriteString(persona.Language)
-		sb.WriteString(".\n")
-	}
-	if persona.Tone != "" {
-		sb.WriteString("Tone: ")
-		sb.WriteString(persona.Tone)
-		sb.WriteString("\n")
-	}
-	if len(persona.StyleTags) > 0 {
-		sb.WriteString("Style tags: ")
-		sb.WriteString(strings.Join(persona.StyleTags, ", "))
-		sb.WriteString("\n")
-	}
-	if persona.KnowledgeLevel != "" {
-		sb.WriteString("Knowledge level: ")
-		sb.WriteString(persona.KnowledgeLevel)
-		sb.WriteString("\n")
-	}
-	if len(persona.AvoidTopics) > 0 {
-		sb.WriteString("Avoid topics: ")
-		sb.WriteString(strings.Join(persona.AvoidTopics, ", "))
-		sb.WriteString("\n")
-	}
-	if req.Server.Mode != "" || req.Server.OnlinePlayers > 0 {
-		sb.WriteString("Server mode: ")
-		sb.WriteString(req.Server.Mode)
-		sb.WriteString(", online players: ")
-		sb.WriteString(fmt.Sprint(req.Server.OnlinePlayers))
-		sb.WriteString("\n")
-	}
-	if req.Topic != "" {
-		sb.WriteString("Topic: ")
-		sb.WriteString(req.Topic)
-		sb.WriteString("\n")
-	} else {
-		sb.WriteString("Topic: small_talk\n")
-	}
-	if len(req.RecentChat) > 0 {
-		sb.WriteString("Recent chat:\n")
-		for _, message := range req.RecentChat {
-			if message.Message == "" {
-				continue
-			}
-			sb.WriteString("- ")
-			sb.WriteString(message.Sender)
-			if message.SenderType != "" {
-				sb.WriteString(" (")
-				sb.WriteString(message.SenderType)
-				sb.WriteString(")")
-			}
-			sb.WriteString(": ")
-			sb.WriteString(message.Message)
-			sb.WriteString("\n")
-		}
+		promptSystem = "You are a Minecraft player chat bot roleplaying as a normal player.\nYou have NO memory and NO access to anything except the provided CHAT LOG and BOT/SERVER info.\nDo NOT invent facts, backstory, previous events, or personal memories.\nDo NOT mention being an AI, a model, or system instructions."
 	}
 	promptRules := strings.TrimSpace(cfg.PromptResponseRules)
 	if promptRules == "" {
-		promptRules = "Respond with a single short chat message. Do not add quotes, bot name prefixes, or extra commentary."
+		promptRules = "- Output exactly ONE single-line chat message in Polish OR output exactly \"__SILENCE__\".\n- Reply ONLY to the LAST message from a PLAYER, and ONLY if it clearly needs a response (question, greeting, direct mention, or conversational prompt).\n- If the last message is from a BOT, or does not need a response, output \"__SILENCE__\".\n- Keep it short: max 80 characters, casual Minecraft chat tone.\n- No quotes, no bot name prefixes, compiler logs, or commentary. No \"(BOT)\".\n- Avoid topics listed in avoid_topics. Never talk about admin powers, cheating, payments."
 	}
+
+	sb.WriteString("=== SYSTEM ===\n")
+	sb.WriteString(promptSystem)
+	sb.WriteString("\n\n")
+	sb.WriteString("=== RULES ===\n")
 	sb.WriteString(promptRules)
+	sb.WriteString("\n\n")
+	sb.WriteString("=== BOT ===\n")
+	sb.WriteString("name: ")
+	sb.WriteString(req.Bot.Name)
 	sb.WriteString("\n")
+	persona := req.Bot.Persona
+	sb.WriteString("language: ")
+	sb.WriteString(persona.Language)
+	sb.WriteString("\n")
+	sb.WriteString("tone: ")
+	sb.WriteString(persona.Tone)
+	sb.WriteString("\n")
+	sb.WriteString("style_tags: ")
+	sb.WriteString(strings.Join(persona.StyleTags, ", "))
+	sb.WriteString("\n")
+	sb.WriteString("knowledge_level: ")
+	sb.WriteString(persona.KnowledgeLevel)
+	sb.WriteString("\n")
+	sb.WriteString("avoid_topics: ")
+	sb.WriteString(strings.Join(persona.AvoidTopics, ", "))
+	sb.WriteString("\n\n")
+	sb.WriteString("=== SERVER ===\n")
+	sb.WriteString("server_id: ")
+	sb.WriteString(req.Server.ServerID)
+	sb.WriteString("\n")
+	sb.WriteString("mode: ")
+	sb.WriteString(req.Server.Mode)
+	sb.WriteString("\n")
+	sb.WriteString("online_players: ")
+	sb.WriteString(fmt.Sprint(req.Server.OnlinePlayers))
+	sb.WriteString("\n\n")
+	sb.WriteString("=== CHAT LOG (last ")
+	sb.WriteString(fmt.Sprint(cfg.ChatHistoryLimit))
+	sb.WriteString(") ===\n")
+	for _, message := range req.RecentChat {
+		if strings.TrimSpace(message.Message) == "" {
+			continue
+		}
+		sb.WriteString("[")
+		sb.WriteString(chatRole(message.SenderType))
+		sb.WriteString("] ")
+		sb.WriteString(sanitizeChatField(message.Sender))
+		sb.WriteString(": ")
+		sb.WriteString(sanitizeChatField(message.Message))
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\n=== TASK ===\n")
+	sb.WriteString("Write ONE short Polish chat message as the BOT that replies to the LAST [PLAYER] message if it needs a reply.\n")
+	sb.WriteString("If no reply is needed, output exactly \"__SILENCE__\".\n\n")
+	sb.WriteString("=== OUTPUT ===\n")
 	return sb.String()
+}
+
+func chatRole(senderType string) string {
+	switch strings.ToLower(strings.TrimSpace(senderType)) {
+	case "player":
+		return "PLAYER"
+	case "bot":
+		return "BOT"
+	default:
+		return "OTHER"
+	}
+}
+
+func sanitizeChatField(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	return strings.TrimSpace(value)
 }
