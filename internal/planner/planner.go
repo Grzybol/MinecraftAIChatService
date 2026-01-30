@@ -92,9 +92,16 @@ func (p *Planner) Plan(req models.PlanRequest) models.PlanResponse {
 }
 
 func filterAvailableBots(bots []models.BotProfile) []models.BotProfile {
+	onlineSpecified := false
+	for _, bot := range bots {
+		if bot.Online {
+			onlineSpecified = true
+			break
+		}
+	}
 	available := make([]models.BotProfile, 0, len(bots))
 	for _, bot := range bots {
-		if !bot.Online {
+		if onlineSpecified && !bot.Online {
 			continue
 		}
 		if bot.CooldownMS > 0 {
