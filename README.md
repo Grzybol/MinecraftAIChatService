@@ -20,6 +20,7 @@ Set the configuration via environment variables or a `.env` file in the repo roo
 
 ```bash
 LLM_MODEL_PATH=/models/deepseek-1b.gguf
+LLM_MODELS_DIR=/models
 LLM_SERVER_URL=http://127.0.0.1:8080
 LLM_SERVER_COMMAND=llama-server
 LLM_COMMAND=llama-cli
@@ -33,8 +34,10 @@ LLM_TOP_P=0.9
 ```
 
 Notes:
-- `LLM_COMMAND` defaults to `llama-cli` on your `PATH`.
-- `LLM_SERVER_COMMAND` defaults to `llama-server` on your `PATH` when auto-starting the server.
+- `LLM_MODEL_PATH` can be omitted to auto-detect the first `.gguf` file in `LLM_MODELS_DIR` (defaults to `models/` or `/models`).
+- `LLM_MODELS_DIR` sets the directory scanned for models and local `llama.cpp` binaries.
+- `LLM_COMMAND` defaults to `llama-cli` on your `PATH` or `LLM_MODELS_DIR`.
+- `LLM_SERVER_COMMAND` defaults to `llama-server` on your `PATH` or `LLM_MODELS_DIR` when auto-starting the server.
 - `LLM_MAX_RAM_MB` sets the Go memory limit before model execution.
 - `LLM_SERVER_URL` enables calling a running `llama.cpp` server (uses the `/completion` endpoint) instead of spawning `llama-cli` for every request.
 - If both `LLM_SERVER_URL` and `LLM_MODEL_PATH` are set, the server will attempt to start `LLM_SERVER_COMMAND` automatically and wait for it to become ready before accepting requests.

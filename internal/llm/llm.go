@@ -59,6 +59,7 @@ func (Noop) Close() error { return nil }
 
 func NewClient(cfg config.LLMConfig) (Generator, error) {
 	logging.Debugf("llm_client_init server_url=%q model_path=%q command=%q server_command=%q", cfg.ServerURL, cfg.ModelPath, cfg.Command, cfg.ServerCommand)
+	_ = resolveModelPath(&cfg)
 	if strings.TrimSpace(cfg.ServerURL) != "" {
 		logging.Debugf("llm_client_mode server url configured")
 		return newServerClient(cfg), nil
@@ -74,10 +75,10 @@ func NewClient(cfg config.LLMConfig) (Generator, error) {
 		logging.Warnf("llm_client_model_unavailable path=%s error=%v", cfg.ModelPath, err)
 		return Noop{}, fmt.Errorf("llm model path unavailable: %w", err)
 	}
-	command, err := exec.LookPath(cfg.Command)
-	if err != nil {
-		logging.Warnf("llm_client_command_missing command=%s error=%v", cfg.Command, err)
-		return Noop{}, fmt.Errorf("llm command not found: %w", err)
+	command, ok := resolveCommandPath(cfg.Command, "llama-cli", &cfg)
+	if !ok {
+		logging.Warnf("llm_client_command_missing command=%s", cfg.Command)
+		return Noop{}, fmt.Errorf("llm command not found: %s", cfg.Command)
 	}
 	logging.Debugf("llm_client_command_resolved command=%s path=%s", cfg.Command, command)
 	if cfg.MaxRAMMB > 0 {

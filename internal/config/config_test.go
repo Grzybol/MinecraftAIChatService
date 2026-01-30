@@ -7,6 +7,7 @@ import (
 
 func TestLoadLLMConfigOverrides(t *testing.T) {
 	t.Setenv("LLM_MODEL_PATH", "/tmp/model.gguf")
+	t.Setenv("LLM_MODELS_DIR", "/tmp/models")
 	t.Setenv("LLM_SERVER_URL", "http://127.0.0.1:8080")
 	t.Setenv("LLM_SERVER_COMMAND", "/usr/local/bin/llama-server")
 	t.Setenv("LLM_COMMAND", "/usr/local/bin/llama-cli")
@@ -26,6 +27,9 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 
 	if cfg.LLM.ModelPath != "/tmp/model.gguf" {
 		t.Fatalf("ModelPath = %q", cfg.LLM.ModelPath)
+	}
+	if cfg.LLM.ModelsDir != "/tmp/models" {
+		t.Fatalf("ModelsDir = %q", cfg.LLM.ModelsDir)
 	}
 	if cfg.LLM.ServerURL != "http://127.0.0.1:8080" {
 		t.Fatalf("ServerURL = %q", cfg.LLM.ServerURL)

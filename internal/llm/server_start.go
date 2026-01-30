@@ -29,7 +29,7 @@ type ServerProcess struct {
 
 func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	serverURL := strings.TrimSpace(cfg.ServerURL)
-	modelPath := strings.TrimSpace(cfg.ModelPath)
+	modelPath := strings.TrimSpace(resolveModelPath(&cfg))
 	if serverURL == "" || modelPath == "" {
 		logging.Debugf("llm_server_start_skipped server_url=%q model_path=%q", serverURL, modelPath)
 		return nil, nil
@@ -47,10 +47,12 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	if command == "" {
 		command = defaultServerCommand
 	}
-	if resolved, err := exec.LookPath(command); err != nil {
-		logging.Warnf("llm_server_command_missing command=%s error=%v", command, err)
+	resolvedCommand, ok := resolveCommandPath(command, defaultServerCommand, &cfg)
+	if !ok {
+		logging.Warnf("llm_server_command_missing command=%s", command)
 	} else {
-		logging.Debugf("llm_server_command_resolved command=%s path=%s", command, resolved)
+		logging.Debugf("llm_server_command_resolved command=%s path=%s", command, resolvedCommand)
+		command = resolvedCommand
 	}
 
 	host, port, err := hostPortForURL(serverURL)
