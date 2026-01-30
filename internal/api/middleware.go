@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"time"
 
@@ -47,6 +49,34 @@ func RequestLogging(next http.Handler) http.Handler {
 			r.RemoteAddr,
 			r.UserAgent(),
 		)
+	})
+}
+
+func RequestDebugLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !logging.Enabled(logging.LevelDebug) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		reqID := RequestIDFromContext(r.Context())
+		var bodyBytes []byte
+		if r.Body != nil {
+			bodyBytes, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+		logging.Debugf(
+			"request_id=%s transaction_id=%s incoming_request method=%s path=%s query=%s content_length=%d content_type=%s headers=%v body=%s",
+			reqID,
+			reqID,
+			r.Method,
+			r.URL.Path,
+			r.URL.RawQuery,
+			r.ContentLength,
+			r.Header.Get("Content-Type"),
+			r.Header,
+			string(bodyBytes),
+		)
+		next.ServeHTTP(w, r)
 	})
 }
 

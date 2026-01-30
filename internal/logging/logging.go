@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -105,4 +106,48 @@ func (l Level) String() string {
 	default:
 		return "INFO"
 	}
+}
+
+type splitWriter struct {
+	stdout      io.Writer
+	stdoutLevel Level
+	file        io.Writer
+	fileLevel   Level
+}
+
+func NewSplitWriter(stdout io.Writer, stdoutLevel Level, file io.Writer, fileLevel Level) io.Writer {
+	return &splitWriter{
+		stdout:      stdout,
+		stdoutLevel: stdoutLevel,
+		file:        file,
+		fileLevel:   fileLevel,
+	}
+}
+
+func (w *splitWriter) Write(p []byte) (int, error) {
+	line := strings.TrimSpace(string(p))
+	level := parseLevelFromLine(line)
+	if level >= w.stdoutLevel {
+		_, _ = w.stdout.Write(p)
+	}
+	if level >= w.fileLevel {
+		_, _ = w.file.Write(p)
+	}
+	return len(p), nil
+}
+
+func parseLevelFromLine(line string) Level {
+	start := strings.Index(line, "[")
+	if start == -1 {
+		return LevelInfo
+	}
+	end := strings.Index(line[start+1:], "]")
+	if end == -1 {
+		return LevelInfo
+	}
+	levelText := line[start+1 : start+1+end]
+	if level, ok := ParseLevel(levelText); ok {
+		return level
+	}
+	return LevelInfo
 }

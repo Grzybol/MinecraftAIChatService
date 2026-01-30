@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"aichatplayers/internal/api"
@@ -61,7 +62,7 @@ func main() {
 	mux.HandleFunc("/v1/plan", methodGuard("POST", h.Plan))
 	mux.HandleFunc("/v1/bots/register", methodGuard("POST", h.RegisterBots))
 
-	wrapped := api.WithRequestID(api.RequestLogging(api.LimitBodySize(bodyLimitBytes, mux)))
+	wrapped := api.WithRequestID(api.RequestLogging(api.LimitBodySize(bodyLimitBytes, api.RequestDebugLogging(mux))))
 
 	server := &http.Server{
 		Addr:         *listenAddr,
@@ -87,10 +88,24 @@ func initLogging() (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
-	logging.SetLevelFromEnv("LOG_LEVEL")
-	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+	stdoutLevel := logging.LevelInfo
+	if level, ok := logging.ParseLevel(os.Getenv("LOG_LEVEL")); ok {
+		stdoutLevel = level
+	}
+	fileLevel := stdoutLevel
+	if raw := strings.TrimSpace(os.Getenv("LOG_FILE_LEVEL")); raw != "" {
+		if level, ok := logging.ParseLevel(raw); ok {
+			fileLevel = level
+		}
+	}
+	minLevel := stdoutLevel
+	if fileLevel < minLevel {
+		minLevel = fileLevel
+	}
+	logging.SetLevel(minLevel)
+	log.SetOutput(io.MultiWriter(logging.NewSplitWriter(os.Stdout, stdoutLevel, logFile, fileLevel)))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
-	logging.Infof("logging initialized path=%s", logPath)
+	logging.Infof("logging initialized path=%s stdout_level=%s file_level=%s", logPath, stdoutLevel, fileLevel)
 	return logFile, nil
 }
 
