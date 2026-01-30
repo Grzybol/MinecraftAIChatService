@@ -25,6 +25,7 @@ type Config struct {
 
 type LLMConfig struct {
 	ModelPath            string
+	ModelsDir            string
 	ServerURL            string
 	ServerCommand        string
 	Command              string
@@ -46,6 +47,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		LLM: LLMConfig{
 			ModelPath:            strings.TrimSpace(os.Getenv("LLM_MODEL_PATH")),
+			ModelsDir:            strings.TrimSpace(os.Getenv("LLM_MODELS_DIR")),
 			ServerURL:            strings.TrimSpace(os.Getenv("LLM_SERVER_URL")),
 			ServerCommand:        strings.TrimSpace(os.Getenv("LLM_SERVER_COMMAND")),
 			Command:              strings.TrimSpace(os.Getenv("LLM_COMMAND")),
