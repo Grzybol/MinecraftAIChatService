@@ -24,7 +24,7 @@ func (f fakeLLM) Generate(ctx context.Context, req llm.Request) (string, error) 
 func (f fakeLLM) Close() error { return nil }
 
 func TestPlannerFallbacksToHeuristics(t *testing.T) {
-	planner := NewPlanner(fakeLLM{enabled: true, err: errors.New("boom")})
+	planner := NewPlanner(fakeLLM{enabled: true, err: errors.New("boom")}, Config{})
 	req := models.PlanRequest{
 		RequestID: "req-1",
 		Server: models.ServerContext{

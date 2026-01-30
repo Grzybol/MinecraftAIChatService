@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"time"
 
 	"aichatplayers/internal/models"
 	"aichatplayers/internal/util"
@@ -16,22 +17,28 @@ type BotMemory struct {
 }
 
 type Planner struct {
-	mu       sync.Mutex
-	memory   map[string]map[string]BotMemory
-	registry map[string]map[string]models.BotProfile
-	llm      LLMGenerator
+	mu         sync.Mutex
+	memory     map[string]map[string]BotMemory
+	registry   map[string]map[string]models.BotProfile
+	llm        LLMGenerator
+	llmTimeout time.Duration
 }
 
 const topicCooldownMS int64 = 15000
 
-func NewPlanner(generator LLMGenerator) *Planner {
+type Config struct {
+	LLMTimeout time.Duration
+}
+
+func NewPlanner(generator LLMGenerator, cfg Config) *Planner {
 	if generator == nil {
 		generator = noopLLM{}
 	}
 	return &Planner{
-		memory:   make(map[string]map[string]BotMemory),
-		registry: make(map[string]map[string]models.BotProfile),
-		llm:      generator,
+		memory:     make(map[string]map[string]BotMemory),
+		registry:   make(map[string]map[string]models.BotProfile),
+		llm:        generator,
+		llmTimeout: cfg.LLMTimeout,
 	}
 }
 

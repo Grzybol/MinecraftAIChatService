@@ -30,13 +30,19 @@ func (p *Planner) generateMessage(req models.PlanRequest, topic Topic, bot model
 		return "", "", false, false
 	}
 	if p.llm != nil && p.llm.Enabled() {
+		ctx := context.Background()
+		var cancel context.CancelFunc
+		if p.llmTimeout > 0 {
+			ctx, cancel = context.WithTimeout(ctx, p.llmTimeout)
+			defer cancel()
+		}
 		llmReq := llm.Request{
 			Server:     req.Server,
 			Bot:        bot,
 			Topic:      string(topic),
 			RecentChat: recentChat(req.Chat, 6),
 		}
-		message, err := p.llm.Generate(context.Background(), llmReq)
+		message, err := p.llm.Generate(ctx, llmReq)
 		if err != nil {
 			log.Printf("planner_llm_error request_id=%s transaction_id=%s bot_id=%s topic=%s error=%v", req.RequestID, req.RequestID, bot.BotID, topic, err)
 		} else if message != "" {

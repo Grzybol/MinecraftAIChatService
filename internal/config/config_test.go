@@ -12,6 +12,7 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 	t.Setenv("LLM_NUM_THREADS", "6")
 	t.Setenv("LLM_CTX_SIZE", "4096")
 	t.Setenv("LLM_TIMEOUT_MS", "3500")
+	t.Setenv("LLM_SOFT_TIMEOUT_MS", "3000")
 	t.Setenv("LLM_TEMPERATURE", "0.25")
 	t.Setenv("LLM_TOP_P", "0.8")
 
@@ -37,6 +38,9 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 	}
 	if cfg.LLM.Timeout != 3500*time.Millisecond {
 		t.Fatalf("Timeout = %v", cfg.LLM.Timeout)
+	}
+	if cfg.LLM.SoftTimeout != 3000*time.Millisecond {
+		t.Fatalf("SoftTimeout = %v", cfg.LLM.SoftTimeout)
 	}
 	if cfg.LLM.Temperature != 0.25 {
 		t.Fatalf("Temperature = %v", cfg.LLM.Temperature)

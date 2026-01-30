@@ -41,10 +41,10 @@ func main() {
 	}
 	defer llmClient.Close()
 	if llmClient.Enabled() {
-		log.Printf("llm_enabled model_path=%s ctx=%d threads=%d timeout=%s", cfg.LLM.ModelPath, cfg.LLM.CtxSize, cfg.LLM.NumThreads, cfg.LLM.Timeout)
+		log.Printf("llm_enabled model_path=%s ctx=%d threads=%d timeout=%s soft_timeout=%s", cfg.LLM.ModelPath, cfg.LLM.CtxSize, cfg.LLM.NumThreads, cfg.LLM.Timeout, cfg.LLM.SoftTimeout)
 	}
 
-	plan := planner.NewPlanner(llmClient)
+	plan := planner.NewPlanner(llmClient, planner.Config{LLMTimeout: cfg.LLM.SoftTimeout})
 	h := &api.Handler{Planner: plan}
 
 	mux := http.NewServeMux()
