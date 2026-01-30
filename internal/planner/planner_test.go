@@ -75,3 +75,53 @@ func TestPlannerFallbacksToHeuristics(t *testing.T) {
 		t.Fatalf("expected heuristic reason, got %s", resp.Actions[0].Reason)
 	}
 }
+
+func TestPlannerTreatsBotsOnlineWhenFlagOmitted(t *testing.T) {
+	planner := NewPlanner(noopLLM{}, Config{})
+	req := models.PlanRequest{
+		RequestID: "req-2",
+		Server: models.ServerContext{
+			ServerID:      "srv-1",
+			Mode:          "LOBBY",
+			OnlinePlayers: 10,
+		},
+		Tick:   123,
+		TimeMS: 1712345000000,
+		Bots: []models.BotProfile{
+			{
+				BotID:  "bot-1",
+				Name:   "Kuba",
+				Online: false,
+				Persona: models.Persona{
+					Language:       "pl",
+					Tone:           "casual",
+					StyleTags:      []string{"short"},
+					AvoidTopics:    []string{"payments"},
+					KnowledgeLevel: "average_player",
+				},
+			},
+		},
+		Chat: []models.ChatMessage{
+			{
+				TimestampMS: 1712344999000,
+				Sender:      "RealPlayer123",
+				SenderType:  "PLAYER",
+				Message:     "hej kto pvp?",
+			},
+		},
+		Settings: models.PlanSettings{
+			MaxActions:  1,
+			ReplyChance: 1,
+			MinDelayMS:  10,
+			MaxDelayMS:  20,
+		},
+	}
+
+	resp := planner.Plan(req)
+	if len(resp.Actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(resp.Actions))
+	}
+	if resp.Debug.ChosenStrategy != "heuristics" {
+		t.Fatalf("expected heuristics strategy, got %s", resp.Debug.ChosenStrategy)
+	}
+}
