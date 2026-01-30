@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,11 +21,19 @@ import (
 )
 
 const defaultServerCommand = "llama-server"
+const serverStateFilename = "llm_server_state.json"
 
 type ServerProcess struct {
 	cmd    *exec.Cmd
 	exitCh chan error
 	url    string
+}
+
+type serverState struct {
+	URL     string   `json:"url"`
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	PID     int      `json:"pid"`
 }
 
 func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
@@ -33,14 +42,6 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	if serverURL == "" || modelPath == "" {
 		logging.Debugf("llm_server_start_skipped server_url=%q model_path=%q", serverURL, modelPath)
 		return nil, nil
-	}
-
-	client := &http.Client{Timeout: 750 * time.Millisecond}
-	if err := checkServerReady(client, serverURL); err == nil {
-		logging.Infof("llm_server_detected url=%s status=ready", serverURL)
-		return nil, nil
-	} else {
-		logging.Debugf("llm_server_not_ready url=%s error=%v", serverURL, err)
 	}
 
 	command := strings.TrimSpace(cfg.ServerCommand)
@@ -68,6 +69,33 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 		args = append(args, "--threads", fmt.Sprint(cfg.NumThreads))
 	}
 
+	desiredState := serverState{
+		URL:     serverURL,
+		Command: command,
+		Args:    args,
+	}
+
+	client := &http.Client{Timeout: 750 * time.Millisecond}
+	if err := checkServerReady(client, serverURL); err == nil {
+		restartNeeded, existingState, err := needsServerRestart(desiredState)
+		if err != nil {
+			logging.Warnf("llm_server_state_read_failed url=%s error=%v", serverURL, err)
+			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
+			return nil, nil
+		}
+		if !restartNeeded {
+			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
+			return nil, nil
+		}
+
+		logging.Infof("llm_server_restart_required url=%s", serverURL)
+		if err := restartRunningServer(serverURL, existingState); err != nil {
+			return nil, err
+		}
+	} else {
+		logging.Debugf("llm_server_not_ready url=%s error=%v", serverURL, err)
+	}
+
 	if stat, err := os.Stat(modelPath); err != nil {
 		logging.Warnf("llm_server_model_unavailable path=%s error=%v", modelPath, err)
 	} else {
@@ -82,6 +110,9 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	logging.Infof("llm_server_starting command=%s args=%s url=%s", command, strings.Join(args, " "), serverURL)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("llm server start: %w", err)
+	}
+	if err := writeServerState(desiredState, cmd.Process.Pid); err != nil {
+		logging.Warnf("llm_server_state_write_failed url=%s error=%v", serverURL, err)
 	}
 
 	proc := &ServerProcess{
@@ -122,11 +153,13 @@ func (p *ServerProcess) Close() error {
 		if err != nil {
 			return fmt.Errorf("llm server stop: %w", err)
 		}
+		_ = removeServerState()
 		return nil
 	case <-time.After(5 * time.Second):
 		if killErr := p.cmd.Process.Kill(); killErr != nil {
 			return fmt.Errorf("llm server kill: %w", killErr)
 		}
+		_ = removeServerState()
 		return nil
 	}
 }
@@ -202,6 +235,60 @@ func checkServerReady(client *http.Client, serverURL string) error {
 	return fmt.Errorf("llm server ready check status=%d", resp.StatusCode)
 }
 
+func needsServerRestart(desired serverState) (bool, *serverState, error) {
+	state, err := readServerState()
+	if err != nil || state == nil {
+		return false, nil, err
+	}
+	return !state.matches(desired), state, nil
+}
+
+func restartRunningServer(serverURL string, state *serverState) error {
+	if state == nil || state.PID == 0 {
+		logging.Warnf("llm_server_restart_skipped reason=missing_pid url=%s", serverURL)
+		return nil
+	}
+	if err := stopServerByPID(state.PID, serverURL); err != nil {
+		return err
+	}
+	return nil
+}
+
+func stopServerByPID(pid int, serverURL string) error {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("llm server find process: %w", err)
+	}
+	logging.Infof("llm_server_stopping pid=%d url=%s", pid, serverURL)
+	if err := proc.Signal(interruptSignal()); err != nil {
+		logging.Warnf("llm_server_signal_failed pid=%d error=%v", pid, err)
+	}
+	if err := waitForServerStop(serverURL, 5*time.Second); err == nil {
+		_ = removeServerState()
+		return nil
+	}
+	if err := proc.Kill(); err != nil {
+		return fmt.Errorf("llm server kill: %w", err)
+	}
+	if err := waitForServerStop(serverURL, 5*time.Second); err != nil {
+		return err
+	}
+	_ = removeServerState()
+	return nil
+}
+
+func waitForServerStop(serverURL string, timeout time.Duration) error {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if err := checkServerReady(client, serverURL); err != nil {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return fmt.Errorf("llm server stop timeout after %s", timeout)
+}
+
 func hostPortForURL(serverURL string) (string, string, error) {
 	parsed, err := url.Parse(serverURL)
 	if err != nil {
@@ -224,4 +311,56 @@ func hostPortForURL(serverURL string) (string, string, error) {
 		logging.Warnf("llm_server_non_localhost url=%s host=%s", serverURL, host)
 	}
 	return host, port, nil
+}
+
+func (s serverState) matches(other serverState) bool {
+	if s.URL != other.URL || s.Command != other.Command {
+		return false
+	}
+	if len(s.Args) != len(other.Args) {
+		return false
+	}
+	for i := range s.Args {
+		if s.Args[i] != other.Args[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func serverStatePath() string {
+	return filepath.Join("logs", serverStateFilename)
+}
+
+func readServerState() (*serverState, error) {
+	path := serverStatePath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var state serverState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+func writeServerState(state serverState, pid int) error {
+	state.PID = pid
+	data, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(serverStatePath(), data, 0o644)
+}
+
+func removeServerState() error {
+	err := os.Remove(serverStatePath())
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
