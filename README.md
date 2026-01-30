@@ -21,19 +21,24 @@ Set the configuration via environment variables or a `.env` file in the repo roo
 ```bash
 LLM_MODEL_PATH=/models/deepseek-1b.gguf
 LLM_SERVER_URL=http://127.0.0.1:8080
+LLM_SERVER_COMMAND=llama-server
 LLM_COMMAND=llama-cli
 LLM_MAX_RAM_MB=1024
 LLM_NUM_THREADS=6
 LLM_CTX_SIZE=2048
 LLM_TIMEOUT_MS=2000
+LLM_SERVER_STARTUP_TIMEOUT_MS=60000
 LLM_TEMPERATURE=0.6
 LLM_TOP_P=0.9
 ```
 
 Notes:
 - `LLM_COMMAND` defaults to `llama-cli` on your `PATH`.
+- `LLM_SERVER_COMMAND` defaults to `llama-server` on your `PATH` when auto-starting the server.
 - `LLM_MAX_RAM_MB` sets the Go memory limit before model execution.
 - `LLM_SERVER_URL` enables calling a running `llama.cpp` server (uses the `/completion` endpoint) instead of spawning `llama-cli` for every request.
+- If both `LLM_SERVER_URL` and `LLM_MODEL_PATH` are set, the server will attempt to start `LLM_SERVER_COMMAND` automatically and wait for it to become ready before accepting requests.
+- `LLM_SERVER_STARTUP_TIMEOUT_MS` controls how long the service waits for the server to become ready before falling back.
 
 ### Windows
 
