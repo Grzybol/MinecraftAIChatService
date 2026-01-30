@@ -103,7 +103,7 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 	if c == nil || !c.enabled {
 		return "", errors.New("llm disabled")
 	}
-	prompt := buildPrompt(req)
+	prompt := buildPrompt(req, c.cfg)
 	if strings.TrimSpace(prompt) == "" {
 		return "", errors.New("llm prompt empty")
 	}
@@ -161,7 +161,7 @@ func (c *ServerClient) Generate(ctx context.Context, req Request) (string, error
 	if c == nil || !c.enabled {
 		return "", errors.New("llm disabled")
 	}
-	prompt := buildPrompt(req)
+	prompt := buildPrompt(req, c.cfg)
 	if strings.TrimSpace(prompt) == "" {
 		return "", errors.New("llm prompt empty")
 	}
@@ -295,9 +295,14 @@ func stripBotPrefix(message, botName string) string {
 	return message
 }
 
-func buildPrompt(req Request) string {
+func buildPrompt(req Request, cfg config.LLMConfig) string {
 	var sb strings.Builder
-	sb.WriteString("You are a Minecraft chat bot.\n")
+	promptSystem := strings.TrimSpace(cfg.PromptSystem)
+	if promptSystem == "" {
+		promptSystem = "You are a Minecraft chat bot."
+	}
+	sb.WriteString(promptSystem)
+	sb.WriteString("\n")
 	if req.Bot.Name != "" {
 		sb.WriteString("Bot name: ")
 		sb.WriteString(req.Bot.Name)
@@ -364,6 +369,11 @@ func buildPrompt(req Request) string {
 			sb.WriteString("\n")
 		}
 	}
-	sb.WriteString("Respond with a single short chat message. Do not add quotes, bot name prefixes, or extra commentary.\n")
+	promptRules := strings.TrimSpace(cfg.PromptResponseRules)
+	if promptRules == "" {
+		promptRules = "Respond with a single short chat message. Do not add quotes, bot name prefixes, or extra commentary."
+	}
+	sb.WriteString(promptRules)
+	sb.WriteString("\n")
 	return sb.String()
 }

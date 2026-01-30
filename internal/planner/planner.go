@@ -22,12 +22,14 @@ type Planner struct {
 	registry   map[string]map[string]models.BotProfile
 	llm        LLMGenerator
 	llmTimeout time.Duration
+	chatLimit  int
 }
 
 const topicCooldownMS int64 = 15000
 
 type Config struct {
-	LLMTimeout time.Duration
+	LLMTimeout       time.Duration
+	ChatHistoryLimit int
 }
 
 func NewPlanner(generator LLMGenerator, cfg Config) *Planner {
@@ -39,6 +41,7 @@ func NewPlanner(generator LLMGenerator, cfg Config) *Planner {
 		registry:   make(map[string]map[string]models.BotProfile),
 		llm:        generator,
 		llmTimeout: cfg.LLMTimeout,
+		chatLimit:  cfg.ChatHistoryLimit,
 	}
 }
 

@@ -17,6 +17,9 @@ const (
 	defaultLLMTopP                 = 0.9
 	defaultLLMMaxRAMMB             = 1024
 	defaultLLMServerStartupTimeout = 60 * time.Second
+	defaultLLMChatHistoryLimit     = 6
+	defaultLLMPromptSystem         = "You are a Minecraft chat bot."
+	defaultLLMPromptResponseRules  = "Respond with a single short chat message. Do not add quotes, bot name prefixes, or extra commentary."
 )
 
 type Config struct {
@@ -37,6 +40,9 @@ type LLMConfig struct {
 	ServerStartupTimeout time.Duration
 	Temperature          float64
 	TopP                 float64
+	ChatHistoryLimit     int
+	PromptSystem         string
+	PromptResponseRules  string
 }
 
 func Load() (Config, error) {
@@ -58,6 +64,9 @@ func Load() (Config, error) {
 			ServerStartupTimeout: defaultLLMServerStartupTimeout,
 			Temperature:          defaultLLMTemperature,
 			TopP:                 defaultLLMTopP,
+			ChatHistoryLimit:     defaultLLMChatHistoryLimit,
+			PromptSystem:         defaultLLMPromptSystem,
+			PromptResponseRules:  defaultLLMPromptResponseRules,
 		},
 	}
 
@@ -113,6 +122,19 @@ func Load() (Config, error) {
 		cfg.LLM.TopP = value
 	}
 
+	if value, ok, err := readEnvInt("LLM_CHAT_HISTORY_LIMIT"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.ChatHistoryLimit = value
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("LLM_PROMPT_SYSTEM")); raw != "" {
+		cfg.LLM.PromptSystem = raw
+	}
+	if raw := strings.TrimSpace(os.Getenv("LLM_PROMPT_RESPONSE_RULES")); raw != "" {
+		cfg.LLM.PromptResponseRules = raw
+	}
+
 	if cfg.LLM.MaxRAMMB < 0 {
 		return Config{}, errors.New("LLM_MAX_RAM_MB must be >= 0")
 	}
@@ -127,6 +149,9 @@ func Load() (Config, error) {
 	}
 	if cfg.LLM.TopP < 0 {
 		return Config{}, errors.New("LLM_TOP_P must be >= 0")
+	}
+	if cfg.LLM.ChatHistoryLimit < 0 {
+		return Config{}, errors.New("LLM_CHAT_HISTORY_LIMIT must be >= 0")
 	}
 	if cfg.LLM.Timeout < 0 {
 		return Config{}, errors.New("LLM_TIMEOUT_MS must be >= 0")

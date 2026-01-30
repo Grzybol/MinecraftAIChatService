@@ -19,6 +19,9 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 	t.Setenv("LLM_SERVER_STARTUP_TIMEOUT_MS", "45000")
 	t.Setenv("LLM_TEMPERATURE", "0.25")
 	t.Setenv("LLM_TOP_P", "0.8")
+	t.Setenv("LLM_CHAT_HISTORY_LIMIT", "2")
+	t.Setenv("LLM_PROMPT_SYSTEM", "You are a chat bot.")
+	t.Setenv("LLM_PROMPT_RESPONSE_RULES", "Reply briefly.")
 
 	cfg, err := Load()
 	if err != nil {
@@ -63,5 +66,14 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 	}
 	if cfg.LLM.TopP != 0.8 {
 		t.Fatalf("TopP = %v", cfg.LLM.TopP)
+	}
+	if cfg.LLM.ChatHistoryLimit != 2 {
+		t.Fatalf("ChatHistoryLimit = %d", cfg.LLM.ChatHistoryLimit)
+	}
+	if cfg.LLM.PromptSystem != "You are a chat bot." {
+		t.Fatalf("PromptSystem = %q", cfg.LLM.PromptSystem)
+	}
+	if cfg.LLM.PromptResponseRules != "Reply briefly." {
+		t.Fatalf("PromptResponseRules = %q", cfg.LLM.PromptResponseRules)
 	}
 }

@@ -40,7 +40,7 @@ func (p *Planner) generateMessage(req models.PlanRequest, topic Topic, bot model
 			Server:     req.Server,
 			Bot:        bot,
 			Topic:      string(topic),
-			RecentChat: recentChat(req.Chat, 6),
+			RecentChat: recentChat(req.Chat, p.chatLimit),
 		}
 		message, err := p.llm.Generate(ctx, llmReq)
 		if err != nil {
