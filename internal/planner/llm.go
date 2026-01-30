@@ -46,18 +46,18 @@ func (p *Planner) generateMessage(req models.PlanRequest, topic Topic, bot model
 		if err != nil {
 			log.Printf("planner_llm_error request_id=%s transaction_id=%s bot_id=%s topic=%s error=%v", req.RequestID, req.RequestID, bot.BotID, topic, err)
 		} else if message != "" {
-			log.Printf("planner_llm_response request_id=%s transaction_id=%s bot_id=%s topic=%s", req.RequestID, req.RequestID, bot.BotID, topic)
+			log.Printf("[LLM-SERVER REPONSE] planner_llm_response request_id=%s transaction_id=%s bot_id=%s topic=%s", req.RequestID, req.RequestID, bot.BotID, topic)
 			return message, "llm", true, true
 		}
 		message, reason := generateResponse(topic, bot, rng)
 		if message != "" {
-			log.Printf("planner_heuristic_response request_id=%s transaction_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, topic, reason)
+			log.Printf("[HEURISTIC RESPONSE] planner_heuristic_response request_id=%s transaction_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, topic, reason)
 		}
 		return message, reason, true, false
 	}
 	message, reason := generateResponse(topic, bot, rng)
 	if message != "" {
-		log.Printf("planner_heuristic_response request_id=%s transaction_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, topic, reason)
+		log.Printf("[HEURISTIC RESPONSE] planner_heuristic_response request_id=%s transaction_id=%s bot_id=%s topic=%s reason=%s", req.RequestID, req.RequestID, bot.BotID, topic, reason)
 	}
 	return message, reason, false, false
 }
