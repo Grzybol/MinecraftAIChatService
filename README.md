@@ -31,6 +31,8 @@ LLM_TIMEOUT_MS=2000
 LLM_SERVER_STARTUP_TIMEOUT_MS=60000
 LLM_TEMPERATURE=0.6
 LLM_TOP_P=0.9
+LOG_LEVEL=INFO
+LOG_FILE_LEVEL=DEBUG
 ```
 
 Notes:
@@ -42,6 +44,8 @@ Notes:
 - `LLM_SERVER_URL` enables calling a running `llama.cpp` server (uses the `/completion` endpoint) instead of spawning `llama-cli` for every request.
 - If both `LLM_SERVER_URL` and `LLM_MODEL_PATH` are set, the server will attempt to start `LLM_SERVER_COMMAND` automatically and wait for it to become ready before accepting requests.
 - `LLM_SERVER_STARTUP_TIMEOUT_MS` controls how long the service waits for the server to become ready before falling back.
+- `LOG_LEVEL` controls the minimum log level printed to stdout (defaults to `INFO`).
+- `LOG_FILE_LEVEL` controls the minimum log level written to log files (defaults to `LOG_LEVEL`).
 
 ### Windows
 
