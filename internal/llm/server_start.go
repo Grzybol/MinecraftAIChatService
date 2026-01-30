@@ -10,11 +10,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"aichatplayers/internal/config"
+	"aichatplayers/internal/logging"
 )
 
 const defaultServerCommand = "llama-server"
@@ -29,18 +31,26 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	serverURL := strings.TrimSpace(cfg.ServerURL)
 	modelPath := strings.TrimSpace(cfg.ModelPath)
 	if serverURL == "" || modelPath == "" {
+		logging.Debugf("llm_server_start_skipped server_url=%q model_path=%q", serverURL, modelPath)
 		return nil, nil
 	}
 
 	client := &http.Client{Timeout: 750 * time.Millisecond}
 	if err := checkServerReady(client, serverURL); err == nil {
-		log.Printf("llm_server_detected url=%s status=ready", serverURL)
+		logging.Infof("llm_server_detected url=%s status=ready", serverURL)
 		return nil, nil
+	} else {
+		logging.Debugf("llm_server_not_ready url=%s error=%v", serverURL, err)
 	}
 
 	command := strings.TrimSpace(cfg.ServerCommand)
 	if command == "" {
 		command = defaultServerCommand
+	}
+	if resolved, err := exec.LookPath(command); err != nil {
+		logging.Warnf("llm_server_command_missing command=%s error=%v", command, err)
+	} else {
+		logging.Debugf("llm_server_command_resolved command=%s path=%s", command, resolved)
 	}
 
 	host, port, err := hostPortForURL(serverURL)
@@ -56,12 +66,18 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 		args = append(args, "--threads", fmt.Sprint(cfg.NumThreads))
 	}
 
+	if stat, err := os.Stat(modelPath); err != nil {
+		logging.Warnf("llm_server_model_unavailable path=%s error=%v", modelPath, err)
+	} else {
+		logging.Debugf("llm_server_model_found path=%s size_bytes=%d", modelPath, stat.Size())
+	}
+
 	cmd := exec.Command(command, args...)
 	configureCommand(cmd)
 	cmd.Stdout = log.Writer()
 	cmd.Stderr = log.Writer()
 
-	log.Printf("llm_server_starting command=%s args=%s url=%s", command, strings.Join(args, " "), serverURL)
+	logging.Infof("llm_server_starting command=%s args=%s url=%s", command, strings.Join(args, " "), serverURL)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("llm server start: %w", err)
 	}
@@ -79,12 +95,13 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
+	logging.Debugf("llm_server_waiting url=%s timeout=%s", serverURL, timeout)
 	if err := waitForServerReady(serverURL, timeout, proc.exitCh); err != nil {
 		_ = proc.Close()
 		return nil, err
 	}
 
-	log.Printf("llm_server_ready url=%s", serverURL)
+	logging.Infof("llm_server_ready url=%s", serverURL)
 	return proc, nil
 }
 
@@ -93,7 +110,7 @@ func (p *ServerProcess) Close() error {
 		return nil
 	}
 
-	log.Printf("llm_server_stopping url=%s pid=%d", p.url, p.cmd.Process.Pid)
+	logging.Infof("llm_server_stopping url=%s pid=%d", p.url, p.cmd.Process.Pid)
 	if err := p.cmd.Process.Signal(interruptSignal()); err != nil {
 		return fmt.Errorf("llm server signal: %w", err)
 	}
@@ -115,9 +132,12 @@ func (p *ServerProcess) Close() error {
 func waitForServerReady(serverURL string, timeout time.Duration, exitCh <-chan error) error {
 	client := &http.Client{Timeout: 1 * time.Second}
 	deadline := time.Now().Add(timeout)
+	var lastErr error
 	for {
 		if err := checkServerReady(client, serverURL); err == nil {
 			return nil
+		} else {
+			lastErr = err
 		}
 
 		select {
@@ -130,6 +150,9 @@ func waitForServerReady(serverURL string, timeout time.Duration, exitCh <-chan e
 		}
 
 		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return fmt.Errorf("llm server start timeout after %s: last_error=%w", timeout, lastErr)
+			}
 			return fmt.Errorf("llm server start timeout after %s", timeout)
 		}
 	}
@@ -196,7 +219,7 @@ func hostPortForURL(serverURL string) (string, string, error) {
 		}
 	}
 	if net.ParseIP(host) == nil && !strings.EqualFold(host, "localhost") {
-		log.Printf("llm_server_non_localhost url=%s host=%s", serverURL, host)
+		logging.Warnf("llm_server_non_localhost url=%s host=%s", serverURL, host)
 	}
 	return host, port, nil
 }

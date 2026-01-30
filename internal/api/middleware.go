@@ -2,9 +2,10 @@ package api
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"time"
+
+	"aichatplayers/internal/logging"
 )
 
 type ctxKey string
@@ -33,7 +34,7 @@ func RequestLogging(next http.Handler) http.Handler {
 		start := time.Now()
 		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
-		log.Printf(
+		logging.Infof(
 			"ts=%s request_id=%s transaction_id=%s method=%s path=%s status=%d bytes=%d duration_ms=%d remote_addr=%s user_agent=%q",
 			start.Format(time.RFC3339),
 			reqID,
