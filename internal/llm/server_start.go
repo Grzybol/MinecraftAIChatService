@@ -22,6 +22,7 @@ import (
 
 const defaultServerCommand = "llama-server"
 const serverStateFilename = "llm_server_state.json"
+
 var errServerStateMissing = errors.New("llm server state missing")
 
 type ServerProcess struct {
@@ -82,11 +83,10 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 		if err != nil {
 			if errors.Is(err, errServerStateMissing) {
 				logging.Warnf("llm_server_state_missing url=%s path=%s", serverURL, serverStatePath())
+				restartNeeded = true
 			} else {
 				logging.Warnf("llm_server_state_read_failed url=%s error=%v", serverURL, err)
 			}
-			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
-			return nil, nil
 		}
 		if !restartNeeded {
 			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
@@ -253,8 +253,8 @@ func needsServerRestart(desired serverState) (bool, *serverState, error) {
 
 func restartRunningServer(serverURL string, state *serverState) error {
 	if state == nil || state.PID == 0 {
-		logging.Warnf("llm_server_restart_skipped reason=missing_pid url=%s", serverURL)
-		return nil
+		logging.Warnf("llm_server_restart_missing_pid url=%s", serverURL)
+		return stopServerByURL(serverURL)
 	}
 	if err := stopServerByPID(state.PID, serverURL); err != nil {
 		return err
@@ -283,6 +283,37 @@ func stopServerByPID(pid int, serverURL string) error {
 	}
 	_ = removeServerState()
 	return nil
+}
+
+func stopServerByURL(serverURL string) error {
+	client := &http.Client{Timeout: 1 * time.Second}
+	endpoints := []string{"/shutdown", "/exit"}
+	methods := []string{http.MethodPost, http.MethodGet}
+	base := strings.TrimRight(serverURL, "/")
+	for _, endpoint := range endpoints {
+		for _, method := range methods {
+			req, err := http.NewRequest(method, base+endpoint, nil)
+			if err != nil {
+				continue
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				continue
+			}
+			_, _ = io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
+				logging.Infof("llm_server_shutdown_requested url=%s method=%s endpoint=%s", serverURL, method, endpoint)
+				if err := waitForServerStop(serverURL, 5*time.Second); err == nil {
+					_ = removeServerState()
+					return nil
+				}
+			} else {
+				logging.Debugf("llm_server_shutdown_rejected url=%s method=%s endpoint=%s status=%d", serverURL, method, endpoint, resp.StatusCode)
+			}
+		}
+	}
+	return fmt.Errorf("llm server stop request failed url=%s", serverURL)
 }
 
 func waitForServerStop(serverURL string, timeout time.Duration) error {

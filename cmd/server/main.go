@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"aichatplayers/internal/api"
@@ -76,8 +79,26 @@ func main() {
 	}
 
 	logging.Infof("listening on %s", *listenAddr)
-	if err := server.ListenAndServe(); err != nil {
-		logging.Fatalf("server stopped: %v", err)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case sig := <-sigCh:
+		logging.Infof("shutdown_signal_received signal=%s", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			logging.Errorf("server_shutdown_failed error=%v", err)
+		}
+	case err := <-errCh:
+		if err != nil && err != http.ErrServerClosed {
+			logging.Errorf("server_stopped error=%v", err)
+		}
 	}
 }
 
