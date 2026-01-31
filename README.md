@@ -46,6 +46,7 @@ Notes:
 - `LLM_MAX_RAM_MB` sets the Go memory limit before model execution.
 - `LLM_SERVER_URL` enables calling a running `llama.cpp` server (uses the `/completion` endpoint) instead of spawning `llama-cli` for every request.
 - If both `LLM_SERVER_URL` and `LLM_MODEL_PATH` are set, the server will attempt to start `LLM_SERVER_COMMAND` automatically and wait for it to become ready before accepting requests.
+- Automatic llama-server restarts rely on the `logs/llm_server_state.json` file; if it's missing (for example, the service is started from a different working directory), stop the running server manually to apply config changes like `LLM_CTX_SIZE`.
 - `LLM_SERVER_STARTUP_TIMEOUT_MS` controls how long the service waits for the server to become ready before falling back.
 - `LLM_CHAT_HISTORY_LIMIT` caps how many recent chat messages are sent to the LLM (0 disables chat context).
 - `LLM_PROMPT_SYSTEM` sets the system/master prompt prefix (`\n` is expanded to newlines when loaded from `.env`).

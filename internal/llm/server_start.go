@@ -22,6 +22,7 @@ import (
 
 const defaultServerCommand = "llama-server"
 const serverStateFilename = "llm_server_state.json"
+var errServerStateMissing = errors.New("llm server state missing")
 
 type ServerProcess struct {
 	cmd    *exec.Cmd
@@ -79,7 +80,11 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	if err := checkServerReady(client, serverURL); err == nil {
 		restartNeeded, existingState, err := needsServerRestart(desiredState)
 		if err != nil {
-			logging.Warnf("llm_server_state_read_failed url=%s error=%v", serverURL, err)
+			if errors.Is(err, errServerStateMissing) {
+				logging.Warnf("llm_server_state_missing url=%s path=%s", serverURL, serverStatePath())
+			} else {
+				logging.Warnf("llm_server_state_read_failed url=%s error=%v", serverURL, err)
+			}
 			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
 			return nil, nil
 		}
@@ -238,6 +243,9 @@ func checkServerReady(client *http.Client, serverURL string) error {
 func needsServerRestart(desired serverState) (bool, *serverState, error) {
 	state, err := readServerState()
 	if err != nil || state == nil {
+		if err == nil && state == nil {
+			return false, nil, errServerStateMissing
+		}
 		return false, nil, err
 	}
 	return !state.matches(desired), state, nil
