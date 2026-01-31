@@ -10,7 +10,7 @@ services:
       - llama-server
 
   llama-server:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server
     environment:
       LLAMA_ARG_MODEL: /models/model.gguf
       LLAMA_ARG_HOST: 0.0.0.0
