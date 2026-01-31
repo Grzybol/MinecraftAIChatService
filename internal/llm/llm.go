@@ -111,10 +111,14 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 	ctx, cancel := withTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 
+	maxTokens := c.cfg.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = defaultMaxTokens
+	}
 	args := []string{
 		"--model", c.cfg.ModelPath,
 		"--prompt", prompt,
-		"--n-predict", fmt.Sprint(defaultMaxTokens),
+		"--n-predict", fmt.Sprint(maxTokens),
 		"--temp", fmt.Sprint(c.cfg.Temperature),
 		"--top-p", fmt.Sprint(c.cfg.TopP),
 	}
@@ -169,9 +173,13 @@ func (c *ServerClient) Generate(ctx context.Context, req Request) (string, error
 	ctx, cancel := withTimeout(ctx, c.cfg.Timeout)
 	defer cancel()
 
+	maxTokens := c.cfg.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = defaultMaxTokens
+	}
 	payload := map[string]any{
 		"prompt":      prompt,
-		"n_predict":   defaultMaxTokens,
+		"n_predict":   maxTokens,
 		"temperature": c.cfg.Temperature,
 		"top_p":       c.cfg.TopP,
 		"stream":      false,
