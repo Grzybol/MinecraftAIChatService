@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  aichatplayers:
+    build: .
+    image: MinecraftAIChatService
+    ports:
+      - "8090:8090"
+    environment:
+      LLM_SERVER_URL: http://llama-server:8080
+    depends_on:
+      - llama-server
+
+  llama-server:
+    image: ghcr.io/ggerganov/llama.cpp:latest
+    command:
+      - "--model"
+      - "/models/model.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models:ro
