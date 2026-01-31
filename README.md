@@ -12,6 +12,21 @@ AIChatPlayers is a lightweight Go HTTP JSON service that plans bot chat replies 
 go run ./cmd/server -listen :8090
 ```
 
+## Run with Docker
+
+The repository can be deployed as two containers: one for the Go service and one for
+`llama.cpp` running the GGUF model in `./models`.
+
+```bash
+docker compose up --build
+```
+
+Notes:
+- Place your GGUF model at `./models/model.gguf`, or update the `llama-server` command in
+  `docker-compose.yml` to point at the correct filename.
+- The service is exposed on `http://localhost:8090` and talks to the llama server via
+  `LLM_SERVER_URL=http://llama-server:8080`.
+
 ## Local LLM configuration
 
 The planner can call a local `llama.cpp`-compatible model (GGUF) via the `llama-cli` binary or an already-running `llama.cpp` server. If the model is unavailable or times out, the service falls back to heuristics. The service does not download models automatically; you must provide the GGUF file yourself (for example, in the `models/` directory).
