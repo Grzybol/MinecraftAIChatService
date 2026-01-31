@@ -3,7 +3,7 @@ version: "3.9"
 services:
   aichatplayers:
     build: .
-    image: MinecraftAIChatService
+    image: minecraft-ai-chat-service
     ports:
       - "8090:8090"
     environment:
