@@ -120,7 +120,7 @@ func TestNormalizeLLMOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeLLMOutput(tt.output, tt.bot)
+			got := normalizeLLMOutput(tt.output, tt.bot, 80, 0)
 			if got != tt.want {
 				t.Fatalf("normalizeLLMOutput() = %q, want %q", got, tt.want)
 			}
