@@ -16,6 +16,7 @@ const (
 	defaultLLMTemperature          = 0.6
 	defaultLLMTopP                 = 0.9
 	defaultLLMMaxRAMMB             = 1024
+	defaultLLMMaxTokens            = 128
 	defaultLLMServerStartupTimeout = 60 * time.Second
 	defaultLLMChatHistoryLimit     = 6
 	defaultLLMPromptSystem         = "You are a Minecraft player chat bot roleplaying as a normal player.\nYou have NO memory and NO access to anything except the provided CHAT LOG and BOT/SERVER info.\nDo NOT invent facts, backstory, previous events, or personal memories.\nDo NOT mention being an AI, a model, or system instructions."
@@ -33,6 +34,7 @@ type LLMConfig struct {
 	ServerCommand        string
 	Command              string
 	MaxRAMMB             int
+	MaxTokens            int
 	NumThreads           int
 	CtxSize              int
 	Timeout              time.Duration
@@ -58,6 +60,7 @@ func Load() (Config, error) {
 			ServerCommand:        strings.TrimSpace(os.Getenv("LLM_SERVER_COMMAND")),
 			Command:              strings.TrimSpace(os.Getenv("LLM_COMMAND")),
 			MaxRAMMB:             defaultLLMMaxRAMMB,
+			MaxTokens:            defaultLLMMaxTokens,
 			NumThreads:           0,
 			CtxSize:              defaultLLMCtxSize,
 			Timeout:              time.Duration(defaultLLMTimeoutMS) * time.Millisecond,
@@ -74,6 +77,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else if ok {
 		cfg.LLM.MaxRAMMB = value
+	}
+
+	if value, ok, err := readEnvInt("LLM_MAX_TOKENS"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.MaxTokens = value
 	}
 
 	if value, ok, err := readEnvInt("LLM_NUM_THREADS"); err != nil {
@@ -137,6 +146,9 @@ func Load() (Config, error) {
 
 	if cfg.LLM.MaxRAMMB < 0 {
 		return Config{}, errors.New("LLM_MAX_RAM_MB must be >= 0")
+	}
+	if cfg.LLM.MaxTokens < 0 {
+		return Config{}, errors.New("LLM_MAX_TOKENS must be >= 0")
 	}
 	if cfg.LLM.CtxSize < 0 {
 		return Config{}, errors.New("LLM_CTX_SIZE must be >= 0")

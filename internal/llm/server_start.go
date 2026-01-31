@@ -90,6 +90,11 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 		}
 		if !restartNeeded {
 			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
+			if existingState != nil && existingState.PID > 0 {
+				attachServerLogs(existingState.PID)
+			} else {
+				logging.Warnf("llm_server_log_attach_skipped url=%s reason=missing_pid", serverURL)
+			}
 			return nil, nil
 		}
 
@@ -402,4 +407,22 @@ func removeServerState() error {
 		return err
 	}
 	return nil
+}
+
+func attachServerLogs(pid int) {
+	for _, fd := range []string{"1", "2"} {
+		path := fmt.Sprintf("/proc/%d/fd/%s", pid, fd)
+		file, err := os.Open(path)
+		if err != nil {
+			logging.Warnf("llm_server_log_attach_failed pid=%d fd=%s error=%v", pid, fd, err)
+			continue
+		}
+		logging.Infof("llm_server_log_attached pid=%d fd=%s", pid, fd)
+		go func(f *os.File, fd string) {
+			defer f.Close()
+			if _, err := io.Copy(log.Writer(), f); err != nil {
+				logging.Warnf("llm_server_log_stream_failed pid=%d fd=%s error=%v", pid, fd, err)
+			}
+		}(file, fd)
+	}
 }

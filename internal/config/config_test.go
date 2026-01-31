@@ -12,6 +12,7 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 	t.Setenv("LLM_SERVER_COMMAND", "/usr/local/bin/llama-server")
 	t.Setenv("LLM_COMMAND", "/usr/local/bin/llama-cli")
 	t.Setenv("LLM_MAX_RAM_MB", "1536")
+	t.Setenv("LLM_MAX_TOKENS", "192")
 	t.Setenv("LLM_NUM_THREADS", "6")
 	t.Setenv("LLM_CTX_SIZE", "4096")
 	t.Setenv("LLM_TIMEOUT_MS", "3500")
@@ -45,6 +46,9 @@ func TestLoadLLMConfigOverrides(t *testing.T) {
 	}
 	if cfg.LLM.MaxRAMMB != 1536 {
 		t.Fatalf("MaxRAMMB = %d", cfg.LLM.MaxRAMMB)
+	}
+	if cfg.LLM.MaxTokens != 192 {
+		t.Fatalf("MaxTokens = %d", cfg.LLM.MaxTokens)
 	}
 	if cfg.LLM.NumThreads != 6 {
 		t.Fatalf("NumThreads = %d", cfg.LLM.NumThreads)
