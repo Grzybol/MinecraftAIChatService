@@ -143,7 +143,7 @@ func (c *Client) Generate(ctx context.Context, req Request) (string, error) {
 		return "", fmt.Errorf("llm command failed: %w", err)
 	}
 
-	response := sanitizeResponse(prompt, string(output), req.Bot.Name)
+	response := sanitizeResponse(prompt, string(output), req.Bot.Name, c.cfg)
 	if response == "" {
 		return "", errors.New("llm returned empty response")
 	}
@@ -221,7 +221,7 @@ func (c *ServerClient) Generate(ctx context.Context, req Request) (string, error
 		return "", fmt.Errorf("llm server response status=%d", resp.StatusCode)
 	}
 
-	response := parseServerResponse(prompt, req.Bot.Name, responseBody)
+	response := parseServerResponse(prompt, req.Bot.Name, responseBody, c.cfg)
 	if response == "" {
 		return "", errors.New("llm returned empty response")
 	}
@@ -252,12 +252,12 @@ func timeoutLabel(timeout time.Duration) time.Duration {
 	return timeout
 }
 
-func parseServerResponse(prompt, botName string, payload []byte) string {
+func parseServerResponse(prompt, botName string, payload []byte, cfg config.LLMConfig) string {
 	var completion struct {
 		Content string `json:"content"`
 	}
 	if err := json.Unmarshal(payload, &completion); err == nil && completion.Content != "" {
-		return sanitizeResponse(prompt, completion.Content, botName)
+		return sanitizeResponse(prompt, completion.Content, botName, cfg)
 	}
 
 	var openAI struct {
@@ -271,20 +271,20 @@ func parseServerResponse(prompt, botName string, payload []byte) string {
 	if err := json.Unmarshal(payload, &openAI); err == nil && len(openAI.Choices) > 0 {
 		choice := openAI.Choices[0]
 		if choice.Message.Content != "" {
-			return sanitizeResponse(prompt, choice.Message.Content, botName)
+			return sanitizeResponse(prompt, choice.Message.Content, botName, cfg)
 		}
 		if choice.Text != "" {
-			return sanitizeResponse(prompt, choice.Text, botName)
+			return sanitizeResponse(prompt, choice.Text, botName, cfg)
 		}
 	}
 	return ""
 }
 
-func sanitizeResponse(prompt, output, botName string) string {
+func sanitizeResponse(prompt, output, botName string, cfg config.LLMConfig) string {
 	response := strings.TrimSpace(output)
 	response = strings.TrimPrefix(response, prompt)
 	response = strings.TrimSpace(response)
-	return normalizeLLMOutput(response, botName)
+	return normalizeLLMOutput(response, botName, cfg.MaxResponseChars, cfg.MaxResponseWords)
 }
 
 func stripBotPrefix(message, botName string) string {
@@ -305,7 +305,7 @@ func stripBotPrefix(message, botName string) string {
 	return trimmed
 }
 
-func normalizeLLMOutput(output, botName string) string {
+func normalizeLLMOutput(output, botName string, maxChars, maxWords int) string {
 	line := firstNonEmptyLine(output)
 	if line == "" {
 		return "__SILENCE__"
@@ -320,8 +320,15 @@ func normalizeLLMOutput(output, botName string) string {
 	if line == "" {
 		return "__SILENCE__"
 	}
-	if runeCount(line) > 80 {
-		line = truncateRunes(line, 80)
+	if maxWords > 0 {
+		line = truncateWords(line, maxWords)
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return "__SILENCE__"
+		}
+	}
+	if maxChars > 0 && runeCount(line) > maxChars {
+		line = truncateRunes(line, maxChars)
 		line = strings.TrimSpace(line)
 		if line == "" {
 			return "__SILENCE__"
@@ -407,6 +414,17 @@ func truncateRunes(value string, limit int) string {
 	return sb.String()
 }
 
+func truncateWords(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	words := strings.Fields(value)
+	if len(words) <= limit {
+		return value
+	}
+	return strings.Join(words[:limit], " ")
+}
+
 func buildPrompt(req Request, cfg config.LLMConfig) string {
 	var sb strings.Builder
 	promptSystem := strings.TrimSpace(cfg.PromptSystem)
@@ -415,7 +433,7 @@ func buildPrompt(req Request, cfg config.LLMConfig) string {
 	}
 	promptRules := strings.TrimSpace(cfg.PromptResponseRules)
 	if promptRules == "" {
-		promptRules = "- Output exactly ONE single-line chat message in Polish OR output exactly \"__SILENCE__\".\n- Reply ONLY to the LAST message from a PLAYER, and ONLY if it clearly needs a response (question, greeting, direct mention, or conversational prompt).\n- If the last message is from a BOT, or does not need a response, output \"__SILENCE__\".\n- Keep it short: max 80 characters, casual Minecraft chat tone.\n- No quotes, no bot name prefixes, compiler logs, or commentary. No \"(BOT)\".\n- Avoid topics listed in avoid_topics. Never talk about admin powers, cheating, payments."
+		promptRules = config.DefaultPromptResponseRules(cfg.MaxResponseChars, cfg.MaxResponseWords)
 	}
 
 	sb.WriteString("=== SYSTEM ===\n")

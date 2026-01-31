@@ -25,6 +25,9 @@ LLM_SERVER_URL=http://127.0.0.1:8080
 LLM_SERVER_COMMAND=llama-server
 LLM_COMMAND=llama-cli
 LLM_MAX_RAM_MB=1024
+LLM_MAX_TOKENS=128
+LLM_MAX_RESPONSE_CHARS=80
+LLM_MAX_RESPONSE_WORDS=0
 LLM_NUM_THREADS=6
 LLM_CTX_SIZE=2048
 LLM_TIMEOUT_MS=2000
@@ -44,6 +47,9 @@ Notes:
 - `LLM_COMMAND` defaults to `llama-cli` on your `PATH` or `LLM_MODELS_DIR`.
 - `LLM_SERVER_COMMAND` defaults to `llama-server` on your `PATH` or `LLM_MODELS_DIR` when auto-starting the server.
 - `LLM_MAX_RAM_MB` sets the Go memory limit before model execution.
+- `LLM_MAX_TOKENS` caps how many tokens the LLM is allowed to generate for each reply.
+- `LLM_MAX_RESPONSE_CHARS` hard-caps the outgoing chat message length in characters (0 disables).
+- `LLM_MAX_RESPONSE_WORDS` hard-caps the outgoing chat message length in words (0 disables).
 - `LLM_SERVER_URL` enables calling a running `llama.cpp` server (uses the `/completion` endpoint) instead of spawning `llama-cli` for every request.
 - If both `LLM_SERVER_URL` and `LLM_MODEL_PATH` are set, the server will attempt to start `LLM_SERVER_COMMAND` automatically and wait for it to become ready before accepting requests.
 - Automatic llama-server restarts rely on the `logs/llm_server_state.json` file; if it's missing (for example, the service is started from a different working directory), stop the running server manually to apply config changes like `LLM_CTX_SIZE`.
