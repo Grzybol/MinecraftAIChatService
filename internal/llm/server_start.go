@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -410,6 +411,18 @@ func removeServerState() error {
 }
 
 func attachServerLogs(pid int) {
+	if pid <= 0 {
+		logging.Warnf("llm_server_log_attach_skipped reason=invalid_pid pid=%d", pid)
+		return
+	}
+	if runtime.GOOS != "linux" {
+		logging.Warnf("llm_server_log_attach_skipped reason=unsupported_os os=%s pid=%d", runtime.GOOS, pid)
+		return
+	}
+	if _, err := os.Stat("/proc"); err != nil {
+		logging.Warnf("llm_server_log_attach_skipped reason=missing_proc pid=%d error=%v", pid, err)
+		return
+	}
 	for _, fd := range []string{"1", "2"} {
 		path := fmt.Sprintf("/proc/%d/fd/%s", pid, fd)
 		file, err := os.Open(path)
