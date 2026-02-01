@@ -42,7 +42,7 @@ type serverState struct {
 func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	serverURL := strings.TrimSpace(cfg.ServerURL)
 	modelPath := strings.TrimSpace(resolveModelPath(&cfg))
-	if serverURL == "" || modelPath == "" {
+	if serverURL == "" {
 		logging.Debugf("llm_server_start_skipped server_url=%q model_path=%q", serverURL, modelPath)
 		return nil, nil
 	}
@@ -51,8 +51,8 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 	if command == "" {
 		command = defaultServerCommand
 	}
-	resolvedCommand, ok := resolveCommandPath(command, defaultServerCommand, &cfg)
-	if !ok {
+	resolvedCommand, commandOk := resolveCommandPath(command, defaultServerCommand, &cfg)
+	if !commandOk {
 		logging.Warnf("llm_server_command_missing command=%s", command)
 	} else {
 		logging.Debugf("llm_server_command_resolved command=%s path=%s", command, resolvedCommand)
@@ -64,12 +64,26 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 		return nil, err
 	}
 
-	args := []string{"--model", modelPath, "--host", host, "--port", port}
-	if cfg.CtxSize > 0 {
-		args = append(args, "--ctx-size", fmt.Sprint(cfg.CtxSize))
+	modelOk := true
+	if modelPath == "" {
+		modelOk = false
+	} else if stat, err := os.Stat(modelPath); err != nil {
+		logging.Warnf("llm_server_model_unavailable path=%s error=%v", modelPath, err)
+		modelOk = false
+	} else {
+		logging.Debugf("llm_server_model_found path=%s size_bytes=%d", modelPath, stat.Size())
 	}
-	if cfg.NumThreads > 0 {
-		args = append(args, "--threads", fmt.Sprint(cfg.NumThreads))
+
+	canStartServer := commandOk && modelOk
+	var args []string
+	if canStartServer {
+		args = []string{"--model", modelPath, "--host", host, "--port", port}
+		if cfg.CtxSize > 0 {
+			args = append(args, "--ctx-size", fmt.Sprint(cfg.CtxSize))
+		}
+		if cfg.NumThreads > 0 {
+			args = append(args, "--threads", fmt.Sprint(cfg.NumThreads))
+		}
 	}
 
 	desiredState := serverState{
@@ -80,6 +94,10 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 
 	client := &http.Client{Timeout: 750 * time.Millisecond}
 	if err := checkServerReady(client, serverURL); err == nil {
+		if !canStartServer {
+			logging.Infof("llm_server_detected url=%s status=ready", serverURL)
+			return nil, nil
+		}
 		restartNeeded, existingState, err := needsServerRestart(desiredState)
 		if err != nil {
 			if errors.Is(err, errServerStateMissing) {
@@ -107,10 +125,17 @@ func EnsureServerReady(cfg config.LLMConfig) (*ServerProcess, error) {
 		logging.Debugf("llm_server_not_ready url=%s error=%v", serverURL, err)
 	}
 
-	if stat, err := os.Stat(modelPath); err != nil {
-		logging.Warnf("llm_server_model_unavailable path=%s error=%v", modelPath, err)
-	} else {
-		logging.Debugf("llm_server_model_found path=%s size_bytes=%d", modelPath, stat.Size())
+	if !canStartServer {
+		timeout := cfg.ServerStartupTimeout
+		if timeout <= 0 {
+			timeout = 60 * time.Second
+		}
+		logging.Warnf("llm_server_start_skipped url=%s reason=missing_command_or_model waiting_for_ready_timeout=%s", serverURL, timeout)
+		if err := waitForServerReady(serverURL, timeout, nil); err != nil {
+			return nil, err
+		}
+		logging.Infof("llm_server_ready url=%s", serverURL)
+		return nil, nil
 	}
 
 	cmd := exec.Command(command, args...)
@@ -186,13 +211,17 @@ func waitForServerReady(serverURL string, timeout time.Duration, exitCh <-chan e
 			lastErr = err
 		}
 
-		select {
-		case err := <-exitCh:
-			if err == nil {
-				return errors.New("llm server exited before ready")
+		if exitCh != nil {
+			select {
+			case err := <-exitCh:
+				if err == nil {
+					return errors.New("llm server exited before ready")
+				}
+				return fmt.Errorf("llm server exited: %w", err)
+			case <-time.After(300 * time.Millisecond):
 			}
-			return fmt.Errorf("llm server exited: %w", err)
-		case <-time.After(300 * time.Millisecond):
+		} else {
+			time.Sleep(300 * time.Millisecond)
 		}
 
 		if time.Now().After(deadline) {
