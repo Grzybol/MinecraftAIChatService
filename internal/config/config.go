@@ -25,7 +25,15 @@ const (
 )
 
 type Config struct {
-	LLM LLMConfig
+	LLM     LLMConfig
+	Elastic ElasticConfig
+}
+
+type ElasticConfig struct {
+	URL        string
+	Index      string
+	APIKey     string
+	VerifyCert bool
 }
 
 type LLMConfig struct {
@@ -77,6 +85,12 @@ func Load() (Config, error) {
 			ChatHistoryLimit:     defaultLLMChatHistoryLimit,
 			PromptSystem:         defaultLLMPromptSystem,
 			PromptResponseRules:  DefaultPromptResponseRules(defaultLLMMaxResponseChars, defaultLLMMaxResponseWords),
+		},
+		Elastic: ElasticConfig{
+			URL:        strings.TrimSpace(os.Getenv("ELASTIC_URL")),
+			Index:      strings.TrimSpace(os.Getenv("ELASTIC_INDEX")),
+			APIKey:     strings.TrimSpace(os.Getenv("ELASTIC_API_KEY")),
+			VerifyCert: true,
 		},
 	}
 
@@ -156,6 +170,12 @@ func Load() (Config, error) {
 		cfg.LLM.ChatHistoryLimit = value
 	}
 
+	if value, ok, err := readEnvBool("ELASTIC_VERIFY_CERT"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.Elastic.VerifyCert = value
+	}
+
 	if raw := strings.TrimSpace(os.Getenv("LLM_PROMPT_SYSTEM")); raw != "" {
 		cfg.LLM.PromptSystem = raw
 	}
@@ -215,6 +235,18 @@ func readEnvInt(key string) (int, bool, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil {
 		return 0, false, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return value, true, nil
+}
+
+func readEnvBool(key string) (bool, bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return false, false, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, false, fmt.Errorf("invalid %s: %w", key, err)
 	}
 	return value, true, nil
 }

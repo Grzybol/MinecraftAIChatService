@@ -32,12 +32,15 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	logFile, err := initLogging()
+	logFile, elasticLogger, err := initLogging(cfg.Elastic)
 	if err != nil {
 		log.Fatalf("failed to init logging: %v", err)
 	}
 	if logFile != nil {
 		defer logFile.Close()
+	}
+	if elasticLogger != nil {
+		defer elasticLogger.Close()
 	}
 
 	serverProcess, err := llm.EnsureServerReady(cfg.LLM)
@@ -102,15 +105,15 @@ func main() {
 	}
 }
 
-func initLogging() (*os.File, error) {
+func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLogger, error) {
 	if err := os.MkdirAll("logs", 0o755); err != nil {
-		return nil, fmt.Errorf("create logs dir: %w", err)
+		return nil, nil, fmt.Errorf("create logs dir: %w", err)
 	}
 	logTimestamp := time.Now().Unix()
 	logPath := filepath.Join("logs", fmt.Sprintf("logs_%d", logTimestamp))
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("open log file: %w", err)
+		return nil, nil, fmt.Errorf("open log file: %w", err)
 	}
 	stdoutLevel := logging.LevelInfo
 	if level, ok := logging.ParseLevel(os.Getenv("LOG_LEVEL")); ok {
@@ -127,10 +130,24 @@ func initLogging() (*os.File, error) {
 		minLevel = fileLevel
 	}
 	logging.SetLevel(minLevel)
-	log.SetOutput(io.MultiWriter(logging.NewSplitWriter(os.Stdout, stdoutLevel, logFile, fileLevel)))
+	var elasticLogger *logging.ElasticLogger
+	if elasticCfg.URL != "" && elasticCfg.Index != "" {
+		elasticLogger, err = logging.NewElasticLogger(elasticCfg.URL, elasticCfg.Index, elasticCfg.APIKey, elasticCfg.VerifyCert)
+		if err != nil {
+			return nil, nil, fmt.Errorf("init elastic logger: %w", err)
+		}
+	}
+	outputs := []io.Writer{logging.NewSplitWriter(os.Stdout, stdoutLevel, logFile, fileLevel)}
+	if elasticLogger != nil {
+		outputs = append(outputs, logging.NewElasticWriter(elasticLogger))
+	}
+	log.SetOutput(io.MultiWriter(outputs...))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
 	logging.Infof("logging initialized path=%s stdout_level=%s file_level=%s", logPath, stdoutLevel, fileLevel)
-	return logFile, nil
+	if elasticLogger != nil {
+		logging.Infof("elastic_logging_enabled url=%s index=%s verify_cert=%t", elasticCfg.URL, elasticCfg.Index, elasticCfg.VerifyCert)
+	}
+	return logFile, elasticLogger, nil
 }
 
 func methodGuard(method string, next http.HandlerFunc) http.HandlerFunc {
