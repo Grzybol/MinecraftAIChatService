@@ -93,7 +93,7 @@ func RequestErrorLogging(next http.Handler) http.Handler {
 		if recorder.status < http.StatusBadRequest {
 			return
 		}
-		logFn := logging.Warnf
+		logFn := logging.Infof
 		if recorder.status >= http.StatusInternalServerError {
 			logFn = logging.Errorf
 		}
