@@ -9,11 +9,12 @@ import (
 const logTimeLayout = "2006/01/02 15:04:05.000000"
 
 type elasticWriter struct {
-	logger *ElasticLogger
+	logger   *ElasticLogger
+	minLevel Level
 }
 
-func NewElasticWriter(logger *ElasticLogger) io.Writer {
-	return &elasticWriter{logger: logger}
+func NewElasticWriter(logger *ElasticLogger, minLevel Level) io.Writer {
+	return &elasticWriter{logger: logger, minLevel: minLevel}
 }
 
 func (w *elasticWriter) Write(p []byte) (int, error) {
@@ -26,6 +27,9 @@ func (w *elasticWriter) Write(p []byte) (int, error) {
 	}
 	timestamp, remainder := parseLogTimestamp(line)
 	level := parseLevelFromLine(remainder)
+	if level < w.minLevel {
+		return len(p), nil
+	}
 	message := parseMessageFromLine(remainder)
 	fields := parseFieldsFromMessage(message)
 	if value, ok := fields["transaction_id"].(string); ok {

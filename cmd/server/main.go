@@ -107,11 +107,15 @@ func main() {
 }
 
 func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLogger, error) {
-	if err := os.MkdirAll("logs", 0o755); err != nil {
+	logDir := strings.TrimSpace(os.Getenv("LOG_DIR"))
+	if logDir == "" {
+		logDir = "logs"
+	}
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		return nil, nil, fmt.Errorf("create logs dir: %w", err)
 	}
 	logTimestamp := time.Now().Unix()
-	logPath := filepath.Join("logs", fmt.Sprintf("logs_%d", logTimestamp))
+	logPath := filepath.Join(logDir, fmt.Sprintf("logs_%d", logTimestamp))
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open log file: %w", err)
@@ -130,6 +134,15 @@ func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLog
 	if fileLevel < minLevel {
 		minLevel = fileLevel
 	}
+	elasticLevel := stdoutLevel
+	if raw := strings.TrimSpace(os.Getenv("ELASTIC_LOG_LEVEL")); raw != "" {
+		if level, ok := logging.ParseLevel(raw); ok {
+			elasticLevel = level
+		}
+	}
+	if elasticLevel < minLevel {
+		minLevel = elasticLevel
+	}
 	logging.SetLevel(minLevel)
 	var elasticLogger *logging.ElasticLogger
 	if elasticCfg.URL != "" && elasticCfg.Index != "" {
@@ -140,7 +153,7 @@ func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLog
 	}
 	outputs := []io.Writer{logging.NewSplitWriter(os.Stdout, stdoutLevel, logFile, fileLevel)}
 	if elasticLogger != nil {
-		outputs = append(outputs, logging.NewElasticWriter(elasticLogger))
+		outputs = append(outputs, logging.NewElasticWriter(elasticLogger, elasticLevel))
 	}
 	log.SetOutput(io.MultiWriter(outputs...))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
