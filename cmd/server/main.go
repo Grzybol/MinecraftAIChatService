@@ -69,6 +69,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", methodGuard("GET", h.Healthz))
 	mux.HandleFunc("/v1/plan", methodGuard("POST", h.Plan))
+	mux.HandleFunc("/v1/engagement", methodGuard("POST", h.Engagement))
 	mux.HandleFunc("/v1/bots/register", methodGuard("POST", h.RegisterBots))
 
 	wrapped := api.WithRequestID(api.RequestLogging(api.LimitBodySize(bodyLimitBytes, api.RequestDebugLogging(mux))))

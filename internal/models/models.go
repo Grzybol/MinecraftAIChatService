@@ -47,6 +47,18 @@ type PlanRequest struct {
 	Settings  PlanSettings  `json:"settings"`
 }
 
+type EngagementRequest struct {
+	RequestID     string        `json:"request_id"`
+	Server        ServerContext `json:"server"`
+	Tick          int64         `json:"tick"`
+	TimeMS        int64         `json:"time_ms"`
+	Bots          []BotProfile  `json:"bots"`
+	Chat          []ChatMessage `json:"chat"`
+	Settings      PlanSettings  `json:"settings"`
+	TargetPlayer  string        `json:"target_player"`
+	ExamplePrompt string        `json:"example_prompt"`
+}
+
 type PlannedAction struct {
 	BotID       string `json:"bot_id"`
 	SendAfterMS int64  `json:"send_after_ms"`

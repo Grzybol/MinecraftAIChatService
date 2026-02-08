@@ -100,6 +100,68 @@ Generate planned chat actions based on recent chat history, server state, and bo
 - The planner may return `"__SILENCE__"` as a message when it explicitly decides not to reply. Clients should treat it as a no-op and suppress output in game chat.
 - `visibility` is currently `PUBLIC` for planned actions.
 
+## POST /v1/engagement
+
+Generate planned chat actions to initiate conversations after chat has been quiet. This endpoint accepts the same payload as `/v1/plan`, with two extra fields for engagement context.
+
+### Expected request
+
+```json
+{
+  "request_id": "req-12345",
+  "server": {
+    "server_id": "survival-1",
+    "mode": "survival",
+    "online_players": 12
+  },
+  "tick": 99123,
+  "time_ms": 1738230000123,
+  "bots": [
+    {
+      "bot_id": "bot-01",
+      "name": "test4",
+      "online": true,
+      "cooldown_ms": 0,
+      "persona": {
+        "language": "pl",
+        "tone": "casual",
+        "style_tags": ["friendly", "short"],
+        "avoid_topics": ["admin", "cheats"],
+        "knowledge_level": "player"
+      }
+    }
+  ],
+  "chat": [
+    {
+      "ts_ms": 1738230000456,
+      "sender": "grzybol",
+      "sender_type": "PLAYER",
+      "message": "halo, jestes tam?"
+    }
+  ],
+  "settings": {
+    "max_actions": 1,
+    "min_delay_ms": 400,
+    "max_delay_ms": 1200,
+    "global_silence_chance": 0.1,
+    "reply_chance": 0.7
+  },
+  "target_player": "PlayerX",
+  "example_prompt": "Napisz krótką wiadomość angażującą gracza/bota o nicku PlayerX."
+}
+```
+
+### Fields
+
+All fields from `/v1/plan` plus:
+
+- `target_player` (string): Chosen player (non-bot) for the engagement attempt.
+- `example_prompt` (string): Short prompt hint for kick-starting the conversation.
+
+### Expected response
+
+Response payload is identical to `/v1/plan` (PlannerResponse).
+
 ## POST /v1/bots/register
 
 Register known bots and their personas for a given server.
