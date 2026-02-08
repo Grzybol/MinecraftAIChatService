@@ -72,7 +72,7 @@ func main() {
 	mux.HandleFunc("/v1/engagement", methodGuard("POST", h.Engagement))
 	mux.HandleFunc("/v1/bots/register", methodGuard("POST", h.RegisterBots))
 
-	wrapped := api.WithRequestID(api.RequestLogging(api.LimitBodySize(bodyLimitBytes, api.RequestDebugLogging(mux))))
+	wrapped := api.WithRequestID(api.RequestLogging(api.LimitBodySize(bodyLimitBytes, api.RequestErrorLogging(api.RequestDebugLogging(mux)))))
 
 	server := &http.Server{
 		Addr:         *listenAddr,
