@@ -53,6 +53,49 @@ func (h *Handler) Plan(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, response)
 }
 
+func (h *Handler) Engagement(w http.ResponseWriter, r *http.Request) {
+	transactionID := RequestIDFromContext(r.Context())
+	var req EngagementRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		logging.Warnf("request_id=%s transaction_id=%s invalid engagement request: %v", transactionID, transactionID, err)
+		respondError(w, http.StatusBadRequest, "invalid_json")
+		return
+	}
+
+	if req.RequestID == "" {
+		if transactionID != "" {
+			req.RequestID = transactionID
+		}
+	}
+	if transactionID == "" {
+		transactionID = req.RequestID
+	}
+
+	if payload, err := json.Marshal(req); err == nil {
+		logging.Debugf("request_id=%s transaction_id=%s engagement_request=%s", req.RequestID, transactionID, string(payload))
+	} else {
+		logging.Warnf("request_id=%s transaction_id=%s failed to marshal engagement request: %v", req.RequestID, transactionID, err)
+	}
+
+	response := h.Planner.Plan(PlanRequest{
+		RequestID: req.RequestID,
+		Server:    req.Server,
+		Tick:      req.Tick,
+		TimeMS:    req.TimeMS,
+		Bots:      req.Bots,
+		Chat:      req.Chat,
+		Settings:  req.Settings,
+	})
+	if payload, err := json.Marshal(response); err == nil {
+		logging.Debugf("request_id=%s transaction_id=%s engagement_response=%s", req.RequestID, transactionID, string(payload))
+	} else {
+		logging.Warnf("request_id=%s transaction_id=%s failed to marshal engagement response: %v", req.RequestID, transactionID, err)
+	}
+	respondJSON(w, http.StatusOK, response)
+}
+
 func (h *Handler) RegisterBots(w http.ResponseWriter, r *http.Request) {
 	transactionID := RequestIDFromContext(r.Context())
 	var req BotRegisterRequest

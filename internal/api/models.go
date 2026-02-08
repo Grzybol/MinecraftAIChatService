@@ -14,6 +14,8 @@ type PlanSettings = models.PlanSettings
 
 type PlanRequest = models.PlanRequest
 
+type EngagementRequest = models.EngagementRequest
+
 type PlannedAction = models.PlannedAction
 
 type PlanDebug = models.PlanDebug
