@@ -26,6 +26,8 @@ Notes:
   `docker-compose.yml` to point at the correct filename.
 - The service is exposed on `http://localhost:8090` and talks to the llama server via
   `LLM_SERVER_URL=http://llama-server:8080`.
+- If Elasticsearch runs on the Docker host, set `ELASTIC_URL` to `https://host.docker.internal:9200`
+  (or `http://host.docker.internal:9200`) so the container can reach it.
 
 ## Local LLM configuration
 
