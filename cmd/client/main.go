@@ -10,12 +10,19 @@ import (
 	"time"
 
 	"aichatplayers/internal/api"
+	"aichatplayers/internal/config"
 	"aichatplayers/internal/logging"
 )
 
 func main() {
 	url := flag.String("url", "http://127.0.0.1:8090", "base url of aichatplayers")
 	flag.Parse()
+
+	cfg, err := config.Load()
+	if err != nil {
+		logging.Fatalf("failed to load config: %v", err)
+	}
+	fmt.Printf("elastic config: url=%s index=%s api_key_set=%t verify_cert=%t\n", cfg.Elastic.URL, cfg.Elastic.Index, cfg.Elastic.APIKey != "", cfg.Elastic.VerifyCert)
 
 	payload := sampleRequest()
 	body, err := json.Marshal(payload)
