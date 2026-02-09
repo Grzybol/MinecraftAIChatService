@@ -24,9 +24,6 @@ docker compose up --build
 Notes:
 - Place your GGUF model at `./models/model.gguf`, or update the `llama-server` command in
   `docker-compose.yml` to point at the correct filename.
-- If your deployment expects TLS certs at `/home/wwwbackend/fullchain.pem` and
-  `/home/wwwbackend/privkey.pem`, set `CERTS_DIR` to the host directory containing those files
-  (defaults to `/home/wwwbackend`) so Docker mounts them into the container.
 - The service is exposed on `http://localhost:8090` and talks to the llama server via
   `LLM_SERVER_URL=http://llama-server:8080`.
 - If Elasticsearch runs on the Docker host, set `ELASTIC_URL` to `https://host.docker.internal:9200`
