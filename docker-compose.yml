@@ -9,9 +9,6 @@ services:
       - .env
     environment:
       LLM_SERVER_URL: http://llama-server:8080
-    volumes:
-      - ${CERTS_DIR:-/home/wwwbackend}/fullchain.pem:/home/wwwbackend/fullchain.pem:ro
-      - ${CERTS_DIR:-/home/wwwbackend}/privkey.pem:/home/wwwbackend/privkey.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
