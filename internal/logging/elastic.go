@@ -125,9 +125,17 @@ func (l *ElasticLogger) send(entry logEntry) {
 	}
 	resp, err := l.client.Do(req)
 	if err != nil {
+		logElasticInfo("elastic_send_failed endpoint=%s error=%v", l.endpoint, err)
 		return
 	}
 	logElasticInfo("elastic_send_response status=%s", resp.Status)
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		bodyPreview, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		logElasticInfo("elastic_send_non_2xx status=%s body=%q", resp.Status, strings.TrimSpace(string(bodyPreview)))
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		return
+	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
 }
