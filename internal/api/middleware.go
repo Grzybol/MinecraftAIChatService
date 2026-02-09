@@ -80,6 +80,42 @@ func RequestDebugLogging(next http.Handler) http.Handler {
 	})
 }
 
+func RequestErrorLogging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqID := RequestIDFromContext(r.Context())
+		var bodyBytes []byte
+		if r.Body != nil {
+			bodyBytes, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		if recorder.status < http.StatusBadRequest {
+			return
+		}
+		logFn := logging.Infof
+		if recorder.status >= http.StatusInternalServerError {
+			logFn = logging.Errorf
+		}
+		logFn(
+			"request_id=%s transaction_id=%s error_request method=%s path=%s query=%s status=%d bytes=%d content_length=%d content_type=%s headers=%v body=%s remote_addr=%s user_agent=%q",
+			reqID,
+			reqID,
+			r.Method,
+			r.URL.Path,
+			r.URL.RawQuery,
+			recorder.status,
+			recorder.bytes,
+			r.ContentLength,
+			r.Header.Get("Content-Type"),
+			r.Header,
+			string(bodyBytes),
+			r.RemoteAddr,
+			r.UserAgent(),
+		)
+	})
+}
+
 func LimitBodySize(limit int64, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, limit)

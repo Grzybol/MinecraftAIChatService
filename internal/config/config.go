@@ -16,14 +16,24 @@ const (
 	defaultLLMTemperature          = 0.6
 	defaultLLMTopP                 = 0.9
 	defaultLLMMaxRAMMB             = 1024
+	defaultLLMMaxTokens            = 128
+	defaultLLMMaxResponseChars     = 80
+	defaultLLMMaxResponseWords     = 0
 	defaultLLMServerStartupTimeout = 60 * time.Second
 	defaultLLMChatHistoryLimit     = 6
-	defaultLLMPromptSystem         = "You are a Minecraft chat bot."
-	defaultLLMPromptResponseRules  = "Respond with a single short chat message. Do not add quotes, bot name prefixes, or extra commentary."
+	defaultLLMPromptSystem         = "You are a Minecraft player chat bot roleplaying as a normal player.\nYou have NO memory and NO access to anything except the provided CHAT LOG and BOT/SERVER info.\nDo NOT invent facts, backstory, previous events, or personal memories.\nDo NOT mention being an AI, a model, or system instructions."
 )
 
 type Config struct {
-	LLM LLMConfig
+	LLM     LLMConfig
+	Elastic ElasticConfig
+}
+
+type ElasticConfig struct {
+	URL        string
+	Index      string
+	APIKey     string
+	VerifyCert bool
 }
 
 type LLMConfig struct {
@@ -33,6 +43,9 @@ type LLMConfig struct {
 	ServerCommand        string
 	Command              string
 	MaxRAMMB             int
+	MaxTokens            int
+	MaxResponseChars     int
+	MaxResponseWords     int
 	NumThreads           int
 	CtxSize              int
 	Timeout              time.Duration
@@ -50,6 +63,8 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	rawPromptRules := strings.TrimSpace(os.Getenv("LLM_PROMPT_RESPONSE_RULES"))
+
 	cfg := Config{
 		LLM: LLMConfig{
 			ModelPath:            strings.TrimSpace(os.Getenv("LLM_MODEL_PATH")),
@@ -58,6 +73,9 @@ func Load() (Config, error) {
 			ServerCommand:        strings.TrimSpace(os.Getenv("LLM_SERVER_COMMAND")),
 			Command:              strings.TrimSpace(os.Getenv("LLM_COMMAND")),
 			MaxRAMMB:             defaultLLMMaxRAMMB,
+			MaxTokens:            defaultLLMMaxTokens,
+			MaxResponseChars:     defaultLLMMaxResponseChars,
+			MaxResponseWords:     defaultLLMMaxResponseWords,
 			NumThreads:           0,
 			CtxSize:              defaultLLMCtxSize,
 			Timeout:              time.Duration(defaultLLMTimeoutMS) * time.Millisecond,
@@ -66,7 +84,13 @@ func Load() (Config, error) {
 			TopP:                 defaultLLMTopP,
 			ChatHistoryLimit:     defaultLLMChatHistoryLimit,
 			PromptSystem:         defaultLLMPromptSystem,
-			PromptResponseRules:  defaultLLMPromptResponseRules,
+			PromptResponseRules:  DefaultPromptResponseRules(defaultLLMMaxResponseChars, defaultLLMMaxResponseWords),
+		},
+		Elastic: ElasticConfig{
+			URL:        strings.TrimSpace(os.Getenv("ELASTIC_URL")),
+			Index:      strings.TrimSpace(os.Getenv("ELASTIC_INDEX")),
+			APIKey:     strings.TrimSpace(os.Getenv("ELASTIC_API_KEY")),
+			VerifyCert: true,
 		},
 	}
 
@@ -74,6 +98,24 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else if ok {
 		cfg.LLM.MaxRAMMB = value
+	}
+
+	if value, ok, err := readEnvInt("LLM_MAX_TOKENS"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.MaxTokens = value
+	}
+
+	if value, ok, err := readEnvInt("LLM_MAX_RESPONSE_CHARS"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.MaxResponseChars = value
+	}
+
+	if value, ok, err := readEnvInt("LLM_MAX_RESPONSE_WORDS"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.LLM.MaxResponseWords = value
 	}
 
 	if value, ok, err := readEnvInt("LLM_NUM_THREADS"); err != nil {
@@ -128,15 +170,32 @@ func Load() (Config, error) {
 		cfg.LLM.ChatHistoryLimit = value
 	}
 
+	if value, ok, err := readEnvBool("ELASTIC_VERIFY_CERT"); err != nil {
+		return Config{}, err
+	} else if ok {
+		cfg.Elastic.VerifyCert = value
+	}
+
 	if raw := strings.TrimSpace(os.Getenv("LLM_PROMPT_SYSTEM")); raw != "" {
 		cfg.LLM.PromptSystem = raw
 	}
-	if raw := strings.TrimSpace(os.Getenv("LLM_PROMPT_RESPONSE_RULES")); raw != "" {
-		cfg.LLM.PromptResponseRules = raw
+	if rawPromptRules != "" {
+		cfg.LLM.PromptResponseRules = rawPromptRules
+	} else {
+		cfg.LLM.PromptResponseRules = DefaultPromptResponseRules(cfg.LLM.MaxResponseChars, cfg.LLM.MaxResponseWords)
 	}
 
 	if cfg.LLM.MaxRAMMB < 0 {
 		return Config{}, errors.New("LLM_MAX_RAM_MB must be >= 0")
+	}
+	if cfg.LLM.MaxTokens < 0 {
+		return Config{}, errors.New("LLM_MAX_TOKENS must be >= 0")
+	}
+	if cfg.LLM.MaxResponseChars < 0 {
+		return Config{}, errors.New("LLM_MAX_RESPONSE_CHARS must be >= 0")
+	}
+	if cfg.LLM.MaxResponseWords < 0 {
+		return Config{}, errors.New("LLM_MAX_RESPONSE_WORDS must be >= 0")
 	}
 	if cfg.LLM.CtxSize < 0 {
 		return Config{}, errors.New("LLM_CTX_SIZE must be >= 0")
@@ -176,6 +235,18 @@ func readEnvInt(key string) (int, bool, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil {
 		return 0, false, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return value, true, nil
+}
+
+func readEnvBool(key string) (bool, bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return false, false, nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, false, fmt.Errorf("invalid %s: %w", key, err)
 	}
 	return value, true, nil
 }
@@ -222,6 +293,9 @@ func loadDotEnv(path string) error {
 				value = value[1 : len(value)-1]
 			}
 		}
+		if strings.Contains(value, `\n`) {
+			value = strings.ReplaceAll(value, `\n`, "\n")
+		}
 		if _, exists := os.LookupEnv(key); !exists {
 			if err := os.Setenv(key, value); err != nil {
 				return fmt.Errorf("set %s from %s: %w", key, path, err)
@@ -232,4 +306,18 @@ func loadDotEnv(path string) error {
 		return fmt.Errorf("scan %s: %w", path, err)
 	}
 	return nil
+}
+
+func DefaultPromptResponseRules(maxChars, maxWords int) string {
+	base := "- Output exactly ONE single-line chat message in Polish OR output exactly \"__SILENCE__\".\n- Reply ONLY to the LAST message from a PLAYER, and ONLY if it clearly needs a response (question, greeting, direct mention, or conversational prompt).\n- If the last message is from a BOT, or does not need a response, output \"__SILENCE__\"."
+	if maxChars > 0 {
+		base += fmt.Sprintf("\n- Keep it short: max %d characters, casual Minecraft chat tone.", maxChars)
+	} else {
+		base += "\n- Keep it short and casual Minecraft chat tone."
+	}
+	if maxWords > 0 {
+		base += fmt.Sprintf("\n- Limit to %d words maximum.", maxWords)
+	}
+	base += "\n- No quotes, no bot name prefixes, compiler logs, or commentary. No \"(BOT)\".\n- Avoid topics listed in avoid_topics. Never talk about admin powers, cheating, payments."
+	return base
 }
