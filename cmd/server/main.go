@@ -31,7 +31,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
-	fmt.Printf("elastic config: url=%s index=%s api_key_set=%t verify_cert=%t\n", cfg.Elastic.URL, cfg.Elastic.Index, cfg.Elastic.APIKey != "", cfg.Elastic.VerifyCert)
 
 	logFile, elasticLogger, err := initLogging(cfg.Elastic)
 	if err != nil {
@@ -43,6 +42,7 @@ func main() {
 	if elasticLogger != nil {
 		defer elasticLogger.Close()
 	}
+	logging.Infof("elastic_config_loaded url=%s index=%s api_key_set=%t verify_cert=%t", cfg.Elastic.URL, cfg.Elastic.Index, cfg.Elastic.APIKey != "", cfg.Elastic.VerifyCert)
 
 	serverProcess, err := llm.EnsureServerReady(cfg.LLM)
 	if err != nil {
