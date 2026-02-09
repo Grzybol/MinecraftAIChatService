@@ -9,6 +9,8 @@ services:
       - .env
     environment:
       LLM_SERVER_URL: http://llama-server:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - llama-server
 

@@ -144,11 +144,7 @@ func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLog
 		minLevel = elasticLevel
 	}
 	logging.SetLevel(minLevel)
-	logging.Infof("elastic_logging_config url=%s index=%s api_key_set=%t verify_cert=%t", elasticCfg.URL, elasticCfg.Index, elasticCfg.APIKey != "", elasticCfg.VerifyCert)
 	var elasticLogger *logging.ElasticLogger
-	if elasticCfg.URL == "" || elasticCfg.Index == "" {
-		logging.Warnf("elastic_logging_disabled missing_url=%t missing_index=%t", elasticCfg.URL == "", elasticCfg.Index == "")
-	}
 	if elasticCfg.URL != "" && elasticCfg.Index != "" {
 		elasticLogger, err = logging.NewElasticLogger(elasticCfg.URL, elasticCfg.Index, elasticCfg.APIKey, elasticCfg.VerifyCert)
 		if err != nil {
@@ -161,6 +157,10 @@ func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLog
 	}
 	log.SetOutput(io.MultiWriter(outputs...))
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.LUTC)
+	logging.Infof("elastic_logging_config url=%s index=%s api_key_set=%t verify_cert=%t", elasticCfg.URL, elasticCfg.Index, elasticCfg.APIKey != "", elasticCfg.VerifyCert)
+	if elasticCfg.URL == "" || elasticCfg.Index == "" {
+		logging.Warnf("elastic_logging_disabled missing_url=%t missing_index=%t", elasticCfg.URL == "", elasticCfg.Index == "")
+	}
 	logging.Infof("logging initialized path=%s stdout_level=%s file_level=%s", logPath, stdoutLevel, fileLevel)
 	if elasticLogger != nil {
 		logging.Infof("elastic_logging_enabled url=%s index=%s verify_cert=%t", elasticCfg.URL, elasticCfg.Index, elasticCfg.VerifyCert)
