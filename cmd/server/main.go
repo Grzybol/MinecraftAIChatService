@@ -144,6 +144,7 @@ func initLogging(elasticCfg config.ElasticConfig) (*os.File, *logging.ElasticLog
 		minLevel = elasticLevel
 	}
 	logging.SetLevel(minLevel)
+	logging.Infof("elastic_logging_config url=%s index=%s api_key_set=%t verify_cert=%t", elasticCfg.URL, elasticCfg.Index, elasticCfg.APIKey != "", elasticCfg.VerifyCert)
 	var elasticLogger *logging.ElasticLogger
 	if elasticCfg.URL != "" && elasticCfg.Index != "" {
 		elasticLogger, err = logging.NewElasticLogger(elasticCfg.URL, elasticCfg.Index, elasticCfg.APIKey, elasticCfg.VerifyCert)

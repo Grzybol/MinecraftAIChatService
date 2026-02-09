@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +19,8 @@ const (
 	elasticLogChannelSize = 512
 	elasticRequestTimeout = 5 * time.Second
 )
+
+var elasticDiagLogger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.LUTC)
 
 type ElasticLogger struct {
 	client   *http.Client
@@ -58,6 +62,7 @@ func NewElasticLogger(url, index, apiKey string, verifyCert bool) (*ElasticLogge
 		queue:    make(chan logEntry, elasticLogChannelSize),
 		stop:     make(chan struct{}),
 	}
+	logElasticInfo("elastic_logger_initialized endpoint=%s verify_cert=%t api_key_set=%t", endpoint, verifyCert, strings.TrimSpace(apiKey) != "")
 	logger.wg.Add(1)
 	go logger.run()
 	return logger, nil
@@ -109,6 +114,7 @@ func (l *ElasticLogger) send(entry logEntry) {
 	if err != nil {
 		return
 	}
+	logElasticInfo("elastic_send_attempt endpoint=%s payload_bytes=%d", l.endpoint, len(body))
 	req, err := http.NewRequest(http.MethodPost, l.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return
@@ -121,6 +127,11 @@ func (l *ElasticLogger) send(entry logEntry) {
 	if err != nil {
 		return
 	}
+	logElasticInfo("elastic_send_response status=%s", resp.Status)
 	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
+}
+
+func logElasticInfo(format string, args ...any) {
+	elasticDiagLogger.Printf("[INFO] "+format, args...)
 }
