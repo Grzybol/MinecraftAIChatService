@@ -42,6 +42,7 @@ func main() {
 	if elasticLogger != nil {
 		defer elasticLogger.Close()
 	}
+	logging.Infof("elastic_config_loaded url=%s index=%s api_key_set=%t verify_cert=%t", cfg.Elastic.URL, cfg.Elastic.Index, cfg.Elastic.APIKey != "", cfg.Elastic.VerifyCert)
 
 	serverProcess, err := llm.EnsureServerReady(cfg.LLM)
 	if err != nil {
