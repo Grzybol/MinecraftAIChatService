@@ -46,11 +46,11 @@ Generate planned chat actions based on recent chat history, server state, and bo
     }
   ],
   "settings": {
-    "max_actions": 1,
-    "min_delay_ms": 400,
-    "max_delay_ms": 1200,
-    "global_silence_chance": 0.1,
-    "reply_chance": 0.7
+    "max-actions": 1,
+    "min-delay-ms": 400,
+    "max-delay-ms": 1200,
+    "global-silence-chance": 0.1,
+    "reply-chance": 0.7
   }
 }
 ```
@@ -69,9 +69,10 @@ Generate planned chat actions based on recent chat history, server state, and bo
   - `sender_type` should be a high-level role label such as `PLAYER` or `BOT`.
   - `message` is the raw chat content and is the field used when constructing prompts.
 - `settings` (object): Planning constraints.
-  - `max_actions` controls how many planned actions to return.
-  - `min_delay_ms` / `max_delay_ms` set action delay bounds.
-  - `global_silence_chance` and `reply_chance` control response probability.
+  - `max-actions` controls how many planned actions to return.
+  - `min-delay-ms` / `max-delay-ms` set action delay bounds.
+  - `global-silence-chance` and `reply-chance` control response probability.
+  - Legacy snake_case variants are also accepted for compatibility (`max_actions`, `min_delay_ms`, `max_delay_ms`, `global_silence_chance`, `reply_chance`).
 
 ### Expected response
 
@@ -140,11 +141,11 @@ Generate planned chat actions to initiate conversations after chat has been quie
     }
   ],
   "settings": {
-    "max_actions": 1,
-    "min_delay_ms": 400,
-    "max_delay_ms": 1200,
-    "global_silence_chance": 0.1,
-    "reply_chance": 0.7
+    "max-actions": 1,
+    "min-delay-ms": 400,
+    "max-delay-ms": 1200,
+    "global-silence-chance": 0.1,
+    "reply-chance": 0.7
   },
   "target_player": "PlayerX",
   "example_prompt": "Napisz krótką wiadomość angażującą gracza/bota o nicku PlayerX."
