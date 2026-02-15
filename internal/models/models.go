@@ -1,5 +1,10 @@
 package models
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 type ServerContext struct {
 	ServerID      string `json:"server_id"`
 	Mode          string `json:"mode"`
@@ -35,6 +40,60 @@ type PlanSettings struct {
 	MaxDelayMS          int64   `json:"max_delay_ms"`
 	GlobalSilenceChance float64 `json:"global_silence_chance"`
 	ReplyChance         float64 `json:"reply_chance"`
+}
+
+func (s *PlanSettings) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	for key, value := range raw {
+		switch key {
+		case "max_actions", "max-actions":
+			if err := json.Unmarshal(value, &s.MaxActions); err != nil {
+				return fmt.Errorf("invalid %s: %w", key, err)
+			}
+		case "min_delay_ms", "min-delay-ms":
+			if err := json.Unmarshal(value, &s.MinDelayMS); err != nil {
+				return fmt.Errorf("invalid %s: %w", key, err)
+			}
+		case "max_delay_ms", "max-delay-ms":
+			if err := json.Unmarshal(value, &s.MaxDelayMS); err != nil {
+				return fmt.Errorf("invalid %s: %w", key, err)
+			}
+		case "global_silence_chance", "global-silence-chance":
+			if err := json.Unmarshal(value, &s.GlobalSilenceChance); err != nil {
+				return fmt.Errorf("invalid %s: %w", key, err)
+			}
+		case "reply_chance", "reply-chance":
+			if err := json.Unmarshal(value, &s.ReplyChance); err != nil {
+				return fmt.Errorf("invalid %s: %w", key, err)
+			}
+		default:
+			return fmt.Errorf("unknown field %q", key)
+		}
+	}
+
+	return nil
+}
+
+func (s PlanSettings) MarshalJSON() ([]byte, error) {
+	type alias struct {
+		MaxActions          int     `json:"max-actions"`
+		MinDelayMS          int64   `json:"min-delay-ms"`
+		MaxDelayMS          int64   `json:"max-delay-ms"`
+		GlobalSilenceChance float64 `json:"global-silence-chance"`
+		ReplyChance         float64 `json:"reply-chance"`
+	}
+
+	return json.Marshal(alias{
+		MaxActions:          s.MaxActions,
+		MinDelayMS:          s.MinDelayMS,
+		MaxDelayMS:          s.MaxDelayMS,
+		GlobalSilenceChance: s.GlobalSilenceChance,
+		ReplyChance:         s.ReplyChance,
+	})
 }
 
 type PlanRequest struct {

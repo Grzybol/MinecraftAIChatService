@@ -48,11 +48,11 @@ Plans chat replies for online bots based on recent chat messages.
     }
   ],
   "settings": {
-    "max_actions": 3,
-    "min_delay_ms": 800,
-    "max_delay_ms": 4500,
-    "global_silence_chance": 0.25,
-    "reply_chance": 0.65
+    "max-actions": 3,
+    "min-delay-ms": 800,
+    "max-delay-ms": 4500,
+    "global-silence-chance": 0.25,
+    "reply-chance": 0.65
   }
 }
 ```
@@ -81,8 +81,9 @@ Plans chat replies for online bots based on recent chat messages.
 ### Notes
 
 - Bots with `cooldown_ms > 0` are excluded from planning.
-- `send_after_ms` is randomized between `min_delay_ms` and `max_delay_ms`.
-- If `global_silence_chance` triggers or toxic chat is detected, the service may return an empty `actions` list.
+- `send_after_ms` is randomized between `min-delay-ms` and `max-delay-ms`.
+- If `global-silence-chance` triggers or toxic chat is detected, the service may return an empty `actions` list.
+- For backward compatibility, `settings` also accepts legacy snake_case keys (`max_actions`, `min_delay_ms`, `max_delay_ms`, `global_silence_chance`, `reply_chance`).
 
 ## POST /v1/bots/register (optional)
 
